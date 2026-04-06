@@ -164,7 +164,7 @@ export default function SmtpHealthPage() {
                     return (
                       <td
                         key={d}
-                        className="px-0 py-0.5 text-center border-t border-border cursor-pointer hover:bg-muted/30 transition-colors"
+                        className="px-0 py-0.5 text-center border-t border-border cursor-pointer hover:bg-muted/30 transition-colors mx-[20px]"
                         style={isToday(d) ? { borderLeft: '2px solid hsl(217 91% 64%)', borderRight: '2px solid hsl(217 91% 64%)' } : undefined}
                         onClick={e => handleCellClick(server.id, d, e)}
                         title={entry ? `${entry.status}${entry.note ? ': ' + entry.note : ''} — by ${entry.updated_by}` : 'Click to set status'}
