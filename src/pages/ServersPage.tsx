@@ -163,7 +163,13 @@ export default function ServersPage() {
   const [filterProvider, setFilterProvider] = useState('');
   const [filterDomain, setFilterDomain] = useState('');
 
-  useEffect(() => { loadServers(); }, []);
+  useEffect(() => {
+    loadServers();
+    const channel = supabase.channel('servers-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'servers' }, () => loadServers())
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, []);
 
   async function loadServers() {
     setLoading(true);

@@ -19,7 +19,13 @@ export default function DelistingsPage() {
   const [filterType, setFilterType] = useState('');
   const [filterResult, setFilterResult] = useState('');
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => {
+    loadData();
+    const channel = supabase.channel('delistings-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'delistings' }, () => loadData())
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, []);
 
   async function loadData() {
     setLoading(true);

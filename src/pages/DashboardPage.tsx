@@ -14,6 +14,12 @@ export default function DashboardPage() {
 
   useEffect(() => {
     loadData();
+    const channels = ['servers', 'smtp_status', 'delistings', 'activity_log'].map(table =>
+      supabase.channel(`dashboard-${table}`)
+        .on('postgres_changes', { event: '*', schema: 'public', table }, () => loadData())
+        .subscribe()
+    );
+    return () => { channels.forEach(c => supabase.removeChannel(c)); };
   }, []);
 
   async function loadData() {

@@ -9,7 +9,13 @@ export default function ActivityLogPage() {
   const [filterUser, setFilterUser] = useState('');
   const [filterAction, setFilterAction] = useState('');
 
-  useEffect(() => { loadLogs(); }, []);
+  useEffect(() => {
+    loadLogs();
+    const channel = supabase.channel('activity-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'activity_log' }, () => loadLogs())
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, []);
 
   async function loadLogs() {
     setLoading(true);

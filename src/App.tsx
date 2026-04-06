@@ -35,7 +35,7 @@ function AppRoutes() {
         <Route path="/servers" element={<ProtectedRoute roles={['boss', 'server_manager']}><ServersPage /></ProtectedRoute>} />
         <Route path="/smtp" element={<SmtpHealthPage />} />
         <Route path="/delistings" element={<DelistingsPage />} />
-        <Route path="/activity" element={<ProtectedRoute roles={['boss', 'server_manager']}><ActivityLogPage /></ProtectedRoute>} />
+        <Route path="/activity" element={<ProtectedRoute roles={['boss']}><ActivityLogPage /></ProtectedRoute>} />
       </Route>
       <Route path="*" element={<NotFound />} />
     </Routes>
