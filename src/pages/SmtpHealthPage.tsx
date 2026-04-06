@@ -17,6 +17,7 @@ export default function SmtpHealthPage() {
   const [selectedStatus, setSelectedStatus] = useState('');
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
+  const [search, setSearch] = useState('');
 
   useEffect(() => { loadData(); }, [month, year]);
 
@@ -111,6 +112,13 @@ export default function SmtpHealthPage() {
         </button>
       </div>
 
+      {/* Search filter */}
+      <div className="flex gap-2">
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by IDs or IP..." className="glass-input rounded-lg px-3 py-1.5 text-sm text-foreground outline-none w-52" />
+        {search && <button onClick={() => setSearch('')} className="text-xs text-muted-foreground hover:text-foreground px-2">Clear</button>}
+        <span className="text-xs text-muted-foreground self-center ml-auto">{servers.filter(s => { const q = search.toLowerCase(); return !q || s.ids?.toLowerCase().includes(q) || s.ip_main?.toLowerCase().includes(q); }).length} servers</span>
+      </div>
+
       {/* Grid */}
       <div className="glass-card rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
@@ -134,7 +142,7 @@ export default function SmtpHealthPage() {
               </tr>
             </thead>
             <tbody>
-              {servers.map(server => (
+              {servers.filter(s => { const q = search.toLowerCase(); return !q || s.ids?.toLowerCase().includes(q) || s.ip_main?.toLowerCase().includes(q); }).map(server => (
                 <tr key={server.id} className="hover:bg-secondary/20">
                   <td className="sticky left-0 z-10 bg-card px-1.5 py-0.5 text-[11px] font-mono font-medium text-primary border-r border-border border-t">{server.ids}</td>
                   <td className="sticky left-[70px] z-10 bg-card px-1.5 py-0.5 text-[11px] font-mono text-muted-foreground border-r border-border border-t">{server.ip_main}</td>

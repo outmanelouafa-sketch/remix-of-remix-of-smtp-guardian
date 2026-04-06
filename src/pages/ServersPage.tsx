@@ -8,7 +8,7 @@ import { Plus, Trash2, PauseCircle, RotateCcw, Loader2, X, Check } from 'lucide-
 
 interface ServerRow {
   id: string; ids: string; ip_main: string; domain: string; provider: string; rdns: string;
-  score: string; d_pro: string; n_due: string; username: string; password: string;
+  score: string; d_pro: string; n_due: string; password: string;
   email: string; passwd: string; price: string; section: string; notes: string;
 }
 
@@ -144,6 +144,9 @@ export default function ServersPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState(emptyServer);
   const [saving, setSaving] = useState(false);
+  const [search, setSearch] = useState('');
+  const [filterProvider, setFilterProvider] = useState('');
+  const [filterDomain, setFilterDomain] = useState('');
 
   useEffect(() => { loadServers(); }, []);
 
@@ -154,7 +157,15 @@ export default function ServersPage() {
     setLoading(false);
   }
 
-  const filtered = servers.filter(s => s.section === tab);
+  const filtered = servers.filter(s => s.section === tab).filter(s => {
+    const q = search.toLowerCase();
+    const matchesSearch = !q || s.ids?.toLowerCase().includes(q) || s.ip_main?.toLowerCase().includes(q) || s.domain?.toLowerCase().includes(q) || s.email?.toLowerCase().includes(q) || s.notes?.toLowerCase().includes(q);
+    const matchesProvider = !filterProvider || s.provider === filterProvider;
+    const matchesDomain = !filterDomain || s.domain?.toLowerCase().includes(filterDomain.toLowerCase());
+    return matchesSearch && matchesProvider && matchesDomain;
+  });
+
+  const providers = [...new Set(servers.filter(s => s.section === tab && s.provider).map(s => s.provider))];
 
   function openAdd() {
     setForm({ ...emptyServer, section: tab });
@@ -209,7 +220,7 @@ export default function ServersPage() {
 
   return (
     <div className="space-y-4 animate-fade-in">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex gap-1">
           {tabs.map(t => (
             <button
@@ -226,6 +237,18 @@ export default function ServersPage() {
         <button onClick={openAdd} className="glass-button rounded-lg px-4 py-1.5 text-sm font-medium flex items-center gap-2">
           <Plus className="w-4 h-4" /> Add Server
         </button>
+      </div>
+
+      <div className="flex gap-2 flex-wrap">
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search IDs, IP, domain, email..." className="glass-input rounded-lg px-3 py-1.5 text-sm text-foreground outline-none w-56" />
+        <select value={filterProvider} onChange={e => setFilterProvider(e.target.value)} className="glass-input rounded-lg px-3 py-1.5 text-sm text-foreground outline-none bg-card">
+          <option value="">All Providers</option>
+          {providers.map(p => <option key={p} value={p}>{p}</option>)}
+        </select>
+        {(search || filterProvider) && (
+          <button onClick={() => { setSearch(''); setFilterProvider(''); setFilterDomain(''); }} className="text-xs text-muted-foreground hover:text-foreground px-2">Clear</button>
+        )}
+        <span className="text-xs text-muted-foreground self-center ml-auto">{filtered.length} result{filtered.length !== 1 ? 's' : ''}</span>
       </div>
 
       <div className="glass-card rounded-xl overflow-hidden">

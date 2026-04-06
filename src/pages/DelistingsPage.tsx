@@ -14,6 +14,9 @@ export default function DelistingsPage() {
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState({ server_id: '', blacklist_type: 'BL', submitted_date: new Date().toISOString().split('T')[0], result: 'pending', notes: '' });
   const [saving, setSaving] = useState(false);
+  const [search, setSearch] = useState('');
+  const [filterType, setFilterType] = useState('');
+  const [filterResult, setFilterResult] = useState('');
 
   useEffect(() => { loadData(); }, []);
 
@@ -52,6 +55,16 @@ export default function DelistingsPage() {
     loadData();
   }
 
+  const filteredDelistings = delistings.filter(d => {
+    const q = search.toLowerCase();
+    const sIds = (d.servers as any)?.ids?.toLowerCase() || '';
+    const sIp = (d.servers as any)?.ip_main?.toLowerCase() || '';
+    const matchesSearch = !q || sIds.includes(q) || sIp.includes(q) || d.notes?.toLowerCase().includes(q) || d.created_by?.toLowerCase().includes(q);
+    const matchesType = !filterType || d.blacklist_type === filterType;
+    const matchesResult = !filterResult || d.result === filterResult;
+    return matchesSearch && matchesType && matchesResult;
+  });
+
   const today = new Date().toISOString().split('T')[0];
   const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0];
   const doneToday = delistings.filter(d => d.submitted_date === today).length;
@@ -83,6 +96,22 @@ export default function DelistingsPage() {
         </button>
       </div>
 
+      <div className="flex gap-2 flex-wrap">
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search server, IP, notes..." className="glass-input rounded-lg px-3 py-1.5 text-sm text-foreground outline-none w-52" />
+        <select value={filterType} onChange={e => setFilterType(e.target.value)} className="glass-input rounded-lg px-3 py-1.5 text-sm text-foreground outline-none bg-card">
+          <option value="">All Types</option>
+          <option value="BL">BL</option><option value="SH">SH</option><option value="BR">BR</option>
+        </select>
+        <select value={filterResult} onChange={e => setFilterResult(e.target.value)} className="glass-input rounded-lg px-3 py-1.5 text-sm text-foreground outline-none bg-card">
+          <option value="">All Results</option>
+          <option value="pending">Pending</option><option value="approved">Approved</option><option value="rejected">Rejected</option>
+        </select>
+        {(search || filterType || filterResult) && (
+          <button onClick={() => { setSearch(''); setFilterType(''); setFilterResult(''); }} className="text-xs text-muted-foreground hover:text-foreground px-2">Clear</button>
+        )}
+        <span className="text-xs text-muted-foreground self-center ml-auto">{filteredDelistings.length} result{filteredDelistings.length !== 1 ? 's' : ''}</span>
+      </div>
+
       <div className="glass-card rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full dense-table">
@@ -92,9 +121,9 @@ export default function DelistingsPage() {
               </tr>
             </thead>
             <tbody>
-              {delistings.length === 0 ? (
+              {filteredDelistings.length === 0 ? (
                 <tr><td colSpan={8} className="text-center py-8 text-muted-foreground">No delistings</td></tr>
-              ) : delistings.map(d => (
+              ) : filteredDelistings.map(d => (
                 <tr key={d.id} className="hover:bg-secondary/30">
                   <td className="font-mono text-primary">{(d.servers as any)?.ids}</td>
                   <td className="font-mono">{(d.servers as any)?.ip_main}</td>
