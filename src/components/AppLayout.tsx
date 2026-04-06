@@ -11,7 +11,7 @@ const navItems = [
   { to: '/servers', icon: Server, label: 'Servers', roles: ['boss', 'server_manager'] },
   { to: '/smtp', icon: CalendarDays, label: 'SMTP Health', roles: ['boss', 'server_manager', 'smtp_manager'] },
   { to: '/delistings', icon: ShieldAlert, label: 'Delistings', roles: ['boss', 'server_manager', 'smtp_manager'] },
-  { to: '/activity', icon: Activity, label: 'Activity Log', roles: ['boss', 'server_manager'] },
+  { to: '/activity', icon: Activity, label: 'Activity Log', roles: ['boss'] },
 ];
 
 export default function AppLayout() {

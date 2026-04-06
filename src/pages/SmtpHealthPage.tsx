@@ -19,7 +19,14 @@ export default function SmtpHealthPage() {
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
 
-  useEffect(() => { loadData(); }, [month, year]);
+  useEffect(() => {
+    loadData();
+    const channels = [
+      supabase.channel('smtp-servers').on('postgres_changes', { event: '*', schema: 'public', table: 'servers' }, () => loadData()).subscribe(),
+      supabase.channel('smtp-status').on('postgres_changes', { event: '*', schema: 'public', table: 'smtp_status' }, () => loadData()).subscribe(),
+    ];
+    return () => { channels.forEach(c => supabase.removeChannel(c)); };
+  }, [month, year]);
 
   async function loadData() {
     setLoading(true);

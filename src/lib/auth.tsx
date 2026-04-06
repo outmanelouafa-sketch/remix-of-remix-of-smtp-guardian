@@ -56,7 +56,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const canManageServers = user?.role === 'boss' || user?.role === 'server_manager';
   const canViewPasswords = user?.role === 'boss' || user?.role === 'server_manager';
-  const canViewActivityLog = user?.role === 'boss' || user?.role === 'server_manager';
+  const canViewActivityLog = user?.role === 'boss';
 
   return (
     <AuthContext.Provider value={{ user, login, logout, loading, canManageServers, canViewPasswords, canViewActivityLog }}>
