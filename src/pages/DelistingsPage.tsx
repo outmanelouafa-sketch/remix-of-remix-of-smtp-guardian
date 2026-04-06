@@ -14,6 +14,9 @@ export default function DelistingsPage() {
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState({ server_id: '', blacklist_type: 'BL', submitted_date: new Date().toISOString().split('T')[0], result: 'pending', notes: '' });
   const [saving, setSaving] = useState(false);
+  const [search, setSearch] = useState('');
+  const [filterType, setFilterType] = useState('');
+  const [filterResult, setFilterResult] = useState('');
 
   useEffect(() => { loadData(); }, []);
 
