@@ -112,6 +112,13 @@ export default function SmtpHealthPage() {
         </button>
       </div>
 
+      {/* Search filter */}
+      <div className="flex gap-2">
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by IDs or IP..." className="glass-input rounded-lg px-3 py-1.5 text-sm text-foreground outline-none w-52" />
+        {search && <button onClick={() => setSearch('')} className="text-xs text-muted-foreground hover:text-foreground px-2">Clear</button>}
+        <span className="text-xs text-muted-foreground self-center ml-auto">{servers.filter(s => { const q = search.toLowerCase(); return !q || s.ids?.toLowerCase().includes(q) || s.ip_main?.toLowerCase().includes(q); }).length} servers</span>
+      </div>
+
       {/* Grid */}
       <div className="glass-card rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
