@@ -48,6 +48,11 @@ export default function SmtpHealthPage() {
   const today = new Date();
   const isToday = (day: number) => today.getFullYear() === year && today.getMonth() === month && today.getDate() === day;
 
+  const todayStr = today.toISOString().slice(0, 10);
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayStr = yesterday.toISOString().slice(0, 10);
+
   const statusMap = useMemo(() => {
     const map: Record<string, any> = {};
     statuses.forEach(s => { map[`${s.server_id}_${s.date}`] = s; });
