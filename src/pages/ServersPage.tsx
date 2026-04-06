@@ -173,6 +173,11 @@ export default function ServersPage() {
 
   async function loadServers() {
     setLoading(true);
+    // Auto-suspend expired production servers
+    const today = new Date().toISOString().split('T')[0];
+    await supabase.from('servers').update({ section: 'suspended' })
+      .eq('section', 'production').lt('n_due', today).not('n_due', 'is', null);
+    
     const { data } = await supabase.from('servers').select('*').order('created_at', { ascending: false });
     setServers((data || []) as ServerRow[]);
     setLoading(false);
