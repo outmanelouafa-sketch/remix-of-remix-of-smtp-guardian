@@ -55,6 +55,16 @@ export default function DelistingsPage() {
     loadData();
   }
 
+  const filteredDelistings = delistings.filter(d => {
+    const q = search.toLowerCase();
+    const sIds = (d.servers as any)?.ids?.toLowerCase() || '';
+    const sIp = (d.servers as any)?.ip_main?.toLowerCase() || '';
+    const matchesSearch = !q || sIds.includes(q) || sIp.includes(q) || d.notes?.toLowerCase().includes(q) || d.created_by?.toLowerCase().includes(q);
+    const matchesType = !filterType || d.blacklist_type === filterType;
+    const matchesResult = !filterResult || d.result === filterResult;
+    return matchesSearch && matchesType && matchesResult;
+  });
+
   const today = new Date().toISOString().split('T')[0];
   const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0];
   const doneToday = delistings.filter(d => d.submitted_date === today).length;

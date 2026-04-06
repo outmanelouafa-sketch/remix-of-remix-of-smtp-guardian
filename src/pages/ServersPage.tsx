@@ -220,7 +220,7 @@ export default function ServersPage() {
 
   return (
     <div className="space-y-4 animate-fade-in">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex gap-1">
           {tabs.map(t => (
             <button
@@ -237,6 +237,18 @@ export default function ServersPage() {
         <button onClick={openAdd} className="glass-button rounded-lg px-4 py-1.5 text-sm font-medium flex items-center gap-2">
           <Plus className="w-4 h-4" /> Add Server
         </button>
+      </div>
+
+      <div className="flex gap-2 flex-wrap">
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search IDs, IP, domain, email..." className="glass-input rounded-lg px-3 py-1.5 text-sm text-foreground outline-none w-56" />
+        <select value={filterProvider} onChange={e => setFilterProvider(e.target.value)} className="glass-input rounded-lg px-3 py-1.5 text-sm text-foreground outline-none bg-card">
+          <option value="">All Providers</option>
+          {providers.map(p => <option key={p} value={p}>{p}</option>)}
+        </select>
+        {(search || filterProvider) && (
+          <button onClick={() => { setSearch(''); setFilterProvider(''); setFilterDomain(''); }} className="text-xs text-muted-foreground hover:text-foreground px-2">Clear</button>
+        )}
+        <span className="text-xs text-muted-foreground self-center ml-auto">{filtered.length} result{filtered.length !== 1 ? 's' : ''}</span>
       </div>
 
       <div className="glass-card rounded-xl overflow-hidden">
