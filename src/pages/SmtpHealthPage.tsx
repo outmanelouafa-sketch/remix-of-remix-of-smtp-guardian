@@ -138,7 +138,7 @@ export default function SmtpHealthPage() {
                 {days.map(d => (
                   <th
                     key={d}
-                    className={`px-0 py-1.5 text-center text-[10px] font-semibold w-[28px] min-w-[28px] ${
+                    className={`px-0 py-1.5 text-center text-[10px] font-semibold w-[34px] min-w-[34px] ${
                       isToday(d) ? 'text-primary' : 'text-muted-foreground'
                     }`}
                     style={isToday(d) ? { borderLeft: '2px solid hsl(217 91% 64%)', borderRight: '2px solid hsl(217 91% 64%)' } : undefined}
