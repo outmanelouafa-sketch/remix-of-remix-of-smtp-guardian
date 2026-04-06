@@ -174,13 +174,13 @@
     @apply inline-flex items-center justify-center rounded-full px-2.5 py-0.5 text-xs font-semibold;
   }
   .dense-table {
-    @apply text-xs;
+    @apply text-xs border-collapse;
   }
   .dense-table th {
-    @apply px-2 py-2 text-muted-foreground font-semibold uppercase tracking-wider text-[10px];
+    @apply px-2 py-2 text-muted-foreground font-semibold uppercase tracking-wider text-[10px] border border-border bg-muted/50;
   }
   .dense-table td {
-    @apply px-2 py-1.5 border-t border-border;
+    @apply px-2 py-1.5 border border-border;
   }
 }
 
