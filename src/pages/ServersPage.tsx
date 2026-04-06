@@ -292,11 +292,12 @@ export default function ServersPage() {
                           value={s[col.key] || ''}
                           type={col.type}
                           onSave={(v) => handleInlineSave(s, col.key, v)}
+                          highlightQuery={search}
                         />
                       </td>
                     ))}
                     <td className="border-r border-border">
-                      <NoteCell value={s.notes || ''} serverId={s.id} onSave={(v) => handleInlineSave(s, 'notes', v)} />
+                      <NoteCell value={s.notes || ''} serverId={s.id} onSave={(v) => handleInlineSave(s, 'notes', v)} highlightQuery={search} />
                     </td>
                     <td className="border-r border-border">
                       {drn !== null && (
