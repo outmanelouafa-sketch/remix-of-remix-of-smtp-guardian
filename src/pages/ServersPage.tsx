@@ -144,6 +144,9 @@ export default function ServersPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState(emptyServer);
   const [saving, setSaving] = useState(false);
+  const [search, setSearch] = useState('');
+  const [filterProvider, setFilterProvider] = useState('');
+  const [filterDomain, setFilterDomain] = useState('');
 
   useEffect(() => { loadServers(); }, []);
 
@@ -154,7 +157,15 @@ export default function ServersPage() {
     setLoading(false);
   }
 
-  const filtered = servers.filter(s => s.section === tab);
+  const filtered = servers.filter(s => s.section === tab).filter(s => {
+    const q = search.toLowerCase();
+    const matchesSearch = !q || s.ids?.toLowerCase().includes(q) || s.ip_main?.toLowerCase().includes(q) || s.domain?.toLowerCase().includes(q) || s.email?.toLowerCase().includes(q) || s.notes?.toLowerCase().includes(q);
+    const matchesProvider = !filterProvider || s.provider === filterProvider;
+    const matchesDomain = !filterDomain || s.domain?.toLowerCase().includes(filterDomain.toLowerCase());
+    return matchesSearch && matchesProvider && matchesDomain;
+  });
+
+  const providers = [...new Set(servers.filter(s => s.section === tab && s.provider).map(s => s.provider))];
 
   function openAdd() {
     setForm({ ...emptyServer, section: tab });
