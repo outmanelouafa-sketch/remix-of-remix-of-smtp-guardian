@@ -4,6 +4,7 @@ import { useAuth } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
 import { toast } from 'sonner';
 import { Plus, Loader2, X, Pencil, Trash2 } from 'lucide-react';
+import { HighlightText } from '@/components/HighlightText';
 
 export default function DelistingsPage() {
   const { user, canManageServers } = useAuth();
@@ -125,8 +126,8 @@ export default function DelistingsPage() {
                 <tr><td colSpan={8} className="text-center py-8 text-muted-foreground">No delistings</td></tr>
               ) : filteredDelistings.map(d => (
                 <tr key={d.id} className="hover:bg-secondary/30">
-                  <td className="font-mono text-primary">{(d.servers as any)?.ids}</td>
-                  <td className="font-mono">{(d.servers as any)?.ip_main}</td>
+                  <td className="font-mono text-primary"><HighlightText text={(d.servers as any)?.ids || ''} query={search} /></td>
+                  <td className="font-mono"><HighlightText text={(d.servers as any)?.ip_main || ''} query={search} /></td>
                   <td>
                     <span className="status-pill" style={{ color: d.blacklist_type === 'BL' ? '#e53e3e' : d.blacklist_type === 'SH' ? '#ecc94b' : '#805ad5', background: d.blacklist_type === 'BL' ? 'rgba(229,62,62,0.15)' : d.blacklist_type === 'SH' ? 'rgba(236,201,75,0.15)' : 'rgba(128,90,213,0.15)' }}>
                       {d.blacklist_type}
@@ -138,8 +139,8 @@ export default function DelistingsPage() {
                       {d.result}
                     </span>
                   </td>
-                  <td className="max-w-[150px] truncate">{d.notes}</td>
-                  <td>{d.created_by}</td>
+                  <td className="max-w-[150px] truncate"><HighlightText text={d.notes || ''} query={search} /></td>
+                  <td><HighlightText text={d.created_by || ''} query={search} /></td>
                   <td>
                     {canManageServers && (
                       <div className="flex gap-1">

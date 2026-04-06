@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Loader2 } from 'lucide-react';
+import { HighlightText } from '@/components/HighlightText';
 
 export default function ActivityLogPage() {
   const [logs, setLogs] = useState<any[]>([]);
@@ -55,10 +56,10 @@ export default function ActivityLogPage() {
               ) : filtered.map(l => (
                 <tr key={l.id} className="hover:bg-secondary/30">
                   <td className="text-muted-foreground whitespace-nowrap">{new Date(l.created_at).toLocaleString()}</td>
-                  <td className="text-primary font-medium">{l.user_name}</td>
+                  <td className="text-primary font-medium"><HighlightText text={l.user_name} query={filterUser} /></td>
                   <td>
                     <span className="status-pill" style={{ color: 'hsl(217 91% 64%)', background: 'rgba(79,142,247,0.12)' }}>
-                      {l.action_type}
+                      <HighlightText text={l.action_type} query={filterAction} />
                     </span>
                   </td>
                   <td className="font-mono">{l.server_ids}</td>
