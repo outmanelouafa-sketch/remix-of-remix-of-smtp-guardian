@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Loader2 } from 'lucide-react';
+import { HighlightText } from '@/components/HighlightText';
 
 export default function ActivityLogPage() {
   const [logs, setLogs] = useState<any[]>([]);
