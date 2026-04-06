@@ -223,6 +223,7 @@ export default function ServersPage() {
     await supabase.from('servers').update({ section: 'suspended' }).eq('id', s.id);
     await logActivity(user!.name, 'suspend_server', s.ids, `Suspended server ${s.ids}`);
     toast.success('Server suspended');
+    setTab('suspended');
     loadServers();
   }
 
