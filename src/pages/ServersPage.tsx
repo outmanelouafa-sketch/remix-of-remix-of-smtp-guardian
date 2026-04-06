@@ -8,7 +8,7 @@ import { Plus, Trash2, PauseCircle, RotateCcw, Loader2, X, Check } from 'lucide-
 
 interface ServerRow {
   id: string; ids: string; ip_main: string; domain: string; provider: string; rdns: string;
-  score: string; d_pro: string; n_due: string; username: string; password: string;
+  score: string; d_pro: string; n_due: string; password: string;
   email: string; passwd: string; price: string; section: string; notes: string;
 }
 
