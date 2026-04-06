@@ -48,6 +48,11 @@ export default function SmtpHealthPage() {
   const today = new Date();
   const isToday = (day: number) => today.getFullYear() === year && today.getMonth() === month && today.getDate() === day;
 
+  const todayStr = today.toISOString().slice(0, 10);
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayStr = yesterday.toISOString().slice(0, 10);
+
   const statusMap = useMemo(() => {
     const map: Record<string, any> = {};
     statuses.forEach(s => { map[`${s.server_id}_${s.date}`] = s; });
@@ -150,7 +155,10 @@ export default function SmtpHealthPage() {
             </thead>
             <tbody>
               {servers.filter(s => { const q = search.toLowerCase(); return !q || s.ids?.toLowerCase().includes(q) || s.ip_main?.toLowerCase().includes(q); }).map(server => (
-                <tr key={server.id} className="hover:bg-secondary/20 h-9">
+                <tr key={server.id} className={`hover:bg-secondary/20 h-9 ${
+                  server.created_at?.slice(0, 10) === todayStr ? 'bg-primary/15' :
+                  server.created_at?.slice(0, 10) === yesterdayStr ? 'bg-primary/7' : ''
+                }`}>
                   <td className="sticky left-0 z-10 bg-card px-1.5 py-0.5 text-[11px] font-mono font-medium text-primary border-r border-border border-t">{server.ids}</td>
                   <td className="sticky left-[70px] z-10 bg-card px-1.5 py-0.5 text-[11px] font-mono text-muted-foreground border-r border-border border-t">{server.ip_main}</td>
                   <td className="sticky left-[180px] z-10 bg-card px-1.5 py-0.5 text-[11px] border-r border-border border-t">
