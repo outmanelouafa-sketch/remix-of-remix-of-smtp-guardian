@@ -105,7 +105,7 @@ const EDITABLE_COLUMNS: { key: keyof ServerRow; label: string; type?: string }[]
   { key: 'passwd', label: 'Passwd' },
 ];
 
-function InlineCell({ value, type, onSave }: { value: string; type?: string; onSave: (v: string) => void }) {
+function InlineCell({ value, type, onSave, highlightQuery }: { value: string; type?: string; onSave: (v: string) => void; highlightQuery?: string }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -131,7 +131,7 @@ function InlineCell({ value, type, onSave }: { value: string; type?: string; onS
         className="cursor-pointer min-h-[20px] w-full truncate hover:bg-primary/5 rounded px-0.5 -mx-0.5"
         title="Click to edit"
       >
-        {value || <span className="text-muted-foreground/40">—</span>}
+        {value ? (highlightQuery ? <HighlightText text={value} query={highlightQuery} /> : value) : <span className="text-muted-foreground/40">—</span>}
       </div>
     );
   }
