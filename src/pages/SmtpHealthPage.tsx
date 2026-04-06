@@ -17,6 +17,7 @@ export default function SmtpHealthPage() {
   const [selectedStatus, setSelectedStatus] = useState('');
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
+  const [search, setSearch] = useState('');
 
   useEffect(() => { loadData(); }, [month, year]);
 
