@@ -100,7 +100,6 @@ export type Database = {
           rdns: string | null
           score: string | null
           section: string
-          username: string | null
         }
         Insert: {
           created_at?: string
@@ -119,7 +118,6 @@ export type Database = {
           rdns?: string | null
           score?: string | null
           section?: string
-          username?: string | null
         }
         Update: {
           created_at?: string
@@ -138,7 +136,6 @@ export type Database = {
           rdns?: string | null
           score?: string | null
           section?: string
-          username?: string | null
         }
         Relationships: []
       }
