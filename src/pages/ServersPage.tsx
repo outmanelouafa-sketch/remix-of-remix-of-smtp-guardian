@@ -30,7 +30,20 @@ function getNoteColor(id: string) {
   return NOTE_COLORS[Math.abs(hash) % NOTE_COLORS.length];
 }
 
-function NoteCell({ value, serverId, onSave }: { value: string; serverId: string; onSave: (v: string) => void }) {
+function HighlightText({ text, query }: { text: string; query: string }) {
+  if (!query || !text) return <>{text}</>;
+  const idx = text.toLowerCase().indexOf(query.toLowerCase());
+  if (idx === -1) return <>{text}</>;
+  return (
+    <>
+      {text.slice(0, idx)}
+      <mark className="bg-primary/25 text-foreground rounded-sm px-0.5">{text.slice(idx, idx + query.length)}</mark>
+      {text.slice(idx + query.length)}
+    </>
+  );
+}
+
+function NoteCell({ value, serverId, onSave, highlightQuery }: { value: string; serverId: string; onSave: (v: string) => void; highlightQuery?: string }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -62,16 +75,18 @@ function NoteCell({ value, serverId, onSave }: { value: string; serverId: string
     );
   }
 
+  const hasMatch = highlightQuery && value.toLowerCase().includes(highlightQuery.toLowerCase());
+
   return (
     <div onClick={() => setEditing(true)} className="cursor-pointer group relative">
       <span
-        className="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold truncate max-w-[70px]"
+        className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold truncate max-w-[70px] ${hasMatch ? 'ring-2 ring-primary/50' : ''}`}
         style={{ color: 'white', background: color }}
       >
         {firstWord}
       </span>
       <div className="absolute bottom-full left-0 mb-1 hidden group-hover:block z-50 max-w-[250px] p-2 rounded-lg text-xs text-foreground shadow-lg border border-border bg-card whitespace-pre-wrap">
-        {value}
+        {highlightQuery ? <HighlightText text={value} query={highlightQuery} /> : value}
       </div>
     </div>
   );
