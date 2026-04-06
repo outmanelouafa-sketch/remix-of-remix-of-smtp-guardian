@@ -4,6 +4,7 @@ import { useAuth } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
 import { toast } from 'sonner';
 import { Plus, Loader2, X, Pencil, Trash2 } from 'lucide-react';
+import { HighlightText } from '@/components/HighlightText';
 
 export default function DelistingsPage() {
   const { user, canManageServers } = useAuth();
