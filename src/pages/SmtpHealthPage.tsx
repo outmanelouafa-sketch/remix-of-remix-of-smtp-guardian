@@ -445,6 +445,31 @@ export default function SmtpHealthPage() {
           </div>
         </div>
       )}
+
+      {/* Context Menu */}
+      {contextMenu && (
+        <div
+          className="fixed z-[100] min-w-[200px] rounded-xl border border-border bg-card shadow-2xl animate-fade-in overflow-hidden"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onClick={e => e.stopPropagation()}
+        >
+          <div className="px-3 py-2 border-b border-border">
+            <span className="text-xs font-semibold text-foreground">{contextMenu.serverIds}</span>
+          </div>
+          <button
+            onClick={() => toggleSblFlag(contextMenu.serverId, contextMenu.serverIds)}
+            className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm hover:bg-muted/50 transition-colors text-left"
+          >
+            <Shield className={`w-4 h-4 ${serverFlags[contextMenu.serverId] ? 'text-yellow-500' : 'text-muted-foreground'}`} />
+            <span className="text-foreground">
+              {serverFlags[contextMenu.serverId] ? 'Remove Spamhaus SBL' : 'Mark as Spamhaus SBL'}
+            </span>
+            {serverFlags[contextMenu.serverId] && (
+              <span className="ml-auto text-[10px] text-muted-foreground">by {serverFlags[contextMenu.serverId].flagged_by}</span>
+            )}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
