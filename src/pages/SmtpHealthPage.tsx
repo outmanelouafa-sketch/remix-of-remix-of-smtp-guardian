@@ -21,11 +21,6 @@ export default function SmtpHealthPage() {
 
   useEffect(() => {
     loadData();
-    const channels = [
-      supabase.channel('smtp-servers').on('postgres_changes', { event: '*', schema: 'public', table: 'servers' }, () => loadData()).subscribe(),
-      supabase.channel('smtp-status').on('postgres_changes', { event: '*', schema: 'public', table: 'smtp_status' }, () => loadData()).subscribe(),
-    ];
-    return () => { channels.forEach(c => supabase.removeChannel(c)); };
   }, [month, year]);
 
   async function loadData() {
@@ -72,21 +67,46 @@ export default function SmtpHealthPage() {
     setSaving(true);
 
     const existing = statusMap[`${popup.serverId}_${popup.date}`];
+    
     if (existing) {
-      await supabase.from('smtp_status').update({
+      const { error } = await supabase.from('smtp_status').update({
         status: selectedStatus,
         note,
         updated_by: user!.name,
         updated_at: new Date().toISOString(),
       }).eq('id', existing.id);
+      
+      if (error) {
+        toast.error('Failed to update status');
+        setSaving(false);
+        return;
+      }
+      
+      // Update local state directly
+      setStatuses(prev => prev.map(s => s.id === existing.id ? {
+        ...s,
+        status: selectedStatus,
+        note,
+        updated_by: user!.name,
+        updated_at: new Date().toISOString(),
+      } : s));
     } else {
-      await supabase.from('smtp_status').insert({
+      const { data, error } = await supabase.from('smtp_status').insert({
         server_id: popup.serverId,
         date: popup.date,
         status: selectedStatus,
         note,
         updated_by: user!.name,
-      });
+      }).select().single();
+      
+      if (error) {
+        toast.error('Failed to add status');
+        setSaving(false);
+        return;
+      }
+      
+      // Add to local state directly
+      setStatuses(prev => [...prev, data]);
     }
 
     const srv = servers.find(s => s.id === popup.serverId);
@@ -94,7 +114,6 @@ export default function SmtpHealthPage() {
     toast.success('Status updated');
     setSaving(false);
     setPopup(null);
-    loadData();
   }
 
   const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -172,17 +191,23 @@ export default function SmtpHealthPage() {
                     return (
                       <td
                         key={d}
-                        className="px-0 py-0.5 text-center border-t border-border cursor-pointer hover:bg-muted/30 transition-colors mx-[20px]"
+                        className="px-0 py-0 border-t border-border cursor-pointer hover:bg-muted/30 transition-colors w-[64px] min-w-[64px] max-w-[64px] h-9"
                         style={isToday(d) ? { borderLeft: '2px solid hsl(217 91% 64%)', borderRight: '2px solid hsl(217 91% 64%)' } : undefined}
                         onClick={e => handleCellClick(server.id, d, e)}
                         title={entry ? `${entry.status}${entry.note ? ': ' + entry.note : ''} — by ${entry.updated_by}` : 'Click to set status'}
                       >
                         {entry && (
                           <span
-                            className="inline-block w-[26px] h-[18px] rounded text-[8px] font-bold leading-[18px]"
+                            className="relative group flex items-center justify-center w-full h-full rounded-none text-[9px] font-bold cursor-pointer"
                             style={{ color: STATUS_CONFIG[entry.status]?.color, background: STATUS_CONFIG[entry.status]?.bg }}
                           >
                             {entry.status}
+                            {/* Tooltip on hover */}
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block z-50 min-w-[120px] p-2 rounded-lg text-xs text-foreground shadow-lg border border-border bg-card whitespace-nowrap">
+                              <div className="font-semibold">{STATUS_CONFIG[entry.status]?.label}</div>
+                              {entry.note && <div className="text-muted-foreground mt-0.5">{entry.note}</div>}
+                              <div className="text-muted-foreground text-[10px] mt-0.5">by {entry.updated_by}</div>
+                            </div>
                           </span>
                         )}
                       </td>

@@ -14,7 +14,7 @@ interface ServerRow {
 
 const emptyServer = {
   ids: '', ip_main: '', domain: '', provider: '', rdns: '', score: '',
-  d_pro: '', n_due: '', username: '', password: '', email: '', passwd: '',
+  d_pro: null as string | null, n_due: null as string | null, password: '', email: '', passwd: '',
   price: '', section: 'production', notes: '',
 };
 
@@ -105,10 +105,13 @@ const EDITABLE_COLUMNS: { key: keyof ServerRow; label: string; type?: string }[]
   { key: 'passwd', label: 'Passwd' },
 ];
 
-function InlineCell({ value, type, onSave, highlightQuery }: { value: string; type?: string; onSave: (v: string) => void; highlightQuery?: string }) {
+function InlineCell({ value, type, onSave, highlightQuery, fieldKey, existingValues }: { value: string; type?: string; onSave: (v: string) => void; highlightQuery?: string; fieldKey?: string; existingValues?: string[] }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [customInput, setCustomInput] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (editing) {
@@ -117,21 +120,117 @@ function InlineCell({ value, type, onSave, highlightQuery }: { value: string; ty
     }
   }, [editing]);
 
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowDropdown(false);
+      }
+    }
+    if (showDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showDropdown]);
+
   const save = () => {
     if (draft !== value) onSave(draft);
     setEditing(false);
+    setShowDropdown(false);
+    setCustomInput(false);
   };
 
-  const cancel = () => { setDraft(value); setEditing(false); };
+  const cancel = () => { setDraft(value); setEditing(false); setShowDropdown(false); setCustomInput(false); };
+
+  const handleSelect = (selectedValue: string) => {
+    if (selectedValue === '__custom__') {
+      setCustomInput(true);
+      setDraft('');
+      setTimeout(() => inputRef.current?.focus(), 0);
+    } else {
+      setDraft(selectedValue);
+      if (selectedValue !== value) onSave(selectedValue);
+      setEditing(false);
+      setShowDropdown(false);
+    }
+  };
 
   if (!editing) {
     return (
       <div
-        onClick={() => setEditing(true)}
-        className="cursor-pointer min-h-[20px] w-full truncate hover:bg-primary/5 rounded px-0.5 -mx-0.5"
+        onClick={() => {
+          setEditing(true);
+          if (existingValues && existingValues.length > 0) {
+            setShowDropdown(true);
+            setCustomInput(false);
+          }
+        }}
+        className="cursor-pointer min-h-[20px] w-full truncate hover:bg-primary/5 rounded px-0.5 -mx-0.5 relative"
         title="Click to edit"
       >
         {value ? (highlightQuery ? <HighlightText text={value} query={highlightQuery} /> : value) : <span className="text-muted-foreground/40">—</span>}
+        
+        {showDropdown && existingValues && (
+          <div ref={dropdownRef} className="absolute top-full left-0 mt-1 z-50 glass-card rounded-lg shadow-lg border border-border min-w-[200px] max-h-[200px] overflow-y-auto">
+            {!customInput ? (
+              <div className="py-1">
+                {existingValues.map((existingValue) => (
+                  <button
+                    key={existingValue}
+                    onClick={() => handleSelect(existingValue)}
+                    className="w-full text-left px-3 py-1.5 text-sm hover:bg-primary/10 transition-colors text-foreground"
+                  >
+                    {existingValue}
+                  </button>
+                ))}
+                <button
+                  onClick={() => handleSelect('__custom__')}
+                  className="w-full text-left px-3 py-1.5 text-sm hover:bg-primary/10 transition-colors text-primary font-medium border-t border-border"
+                >
+                  + Add New
+                </button>
+              </div>
+            ) : (
+              <div className="p-2">
+                <input
+                  ref={inputRef}
+                  type={type || 'text'}
+                  value={draft}
+                  onChange={e => setDraft(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') cancel(); }}
+                  onBlur={save}
+                  className="w-full bg-primary/10 border border-primary/30 rounded px-2 py-1 text-xs outline-none text-foreground"
+                  placeholder="Enter new value..."
+                />
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (showDropdown && existingValues && !customInput) {
+    return (
+      <div ref={dropdownRef} className="relative">
+        <div className="absolute top-full left-0 mt-1 z-50 glass-card rounded-lg shadow-lg border border-border min-w-[200px] max-h-[200px] overflow-y-auto">
+          <div className="py-1">
+            {existingValues.map((existingValue) => (
+              <button
+                key={existingValue}
+                onClick={() => handleSelect(existingValue)}
+                className="w-full text-left px-3 py-1.5 text-sm hover:bg-primary/10 transition-colors text-foreground"
+              >
+                {existingValue}
+              </button>
+            ))}
+            <button
+              onClick={() => handleSelect('__custom__')}
+              className="w-full text-left px-3 py-1.5 text-sm hover:bg-primary/10 transition-colors text-primary font-medium border-t border-border"
+            >
+              + Add New
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
@@ -156,19 +255,12 @@ export default function ServersPage() {
   const [servers, setServers] = useState<ServerRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<'production' | 'redirect' | 'suspended'>('production');
-  const [modalOpen, setModalOpen] = useState(false);
-  const [form, setForm] = useState(emptyServer);
-  const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
   const [filterProvider, setFilterProvider] = useState('');
   const [filterDomain, setFilterDomain] = useState('');
 
   useEffect(() => {
     loadServers();
-    const channel = supabase.channel('servers-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'servers' }, () => loadServers())
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
   }, []);
 
   async function loadServers() {
@@ -192,53 +284,94 @@ export default function ServersPage() {
   });
 
   const providers = [...new Set(servers.filter(s => s.section === tab && s.provider).map(s => s.provider))];
-
-  function openAdd() {
-    setForm({ ...emptyServer, section: tab });
-    setModalOpen(true);
-  }
+  const emails = [...new Set(servers.filter(s => s.section === tab && s.email).map(s => s.email))];
 
   async function handleAdd() {
-    setSaving(true);
-    await supabase.from('servers').insert(form);
-    await logActivity(user!.name, 'add_server', form.ids, `Added server ${form.ids}`);
-    toast.success('Server added');
-    setSaving(false);
-    setModalOpen(false);
-    loadServers();
+    // Generate a temporary IDs value that can be updated later
+    const tempId = `TEMP-${Date.now()}`;
+    const newServer = { ...emptyServer, ids: tempId, section: tab };
+    const { data, error } = await supabase.from('servers').insert(newServer).select().single();
+    if (error) {
+      console.error('Insert error:', error);
+      toast.error('Failed to add server: ' + error.message);
+      return;
+    }
+    
+    // Add directly to local state instead of reloading
+    setServers(prev => [data as ServerRow, ...prev]);
+    
+    await logActivity(user!.name, 'add_server', tempId, `Added new empty server`);
+    toast.success('Empty row added - start typing to fill');
   }
 
   async function handleInlineSave(server: ServerRow, key: keyof ServerRow, newValue: string) {
     const update = { [key]: newValue };
-    await supabase.from('servers').update(update).eq('id', server.id);
+    const { error } = await supabase.from('servers').update(update).eq('id', server.id);
+    
+    if (error) {
+      toast.error('Failed to save');
+      return;
+    }
+    
+    // Update local state directly without reloading
     setServers(prev => prev.map(s => s.id === server.id ? { ...s, [key]: newValue } : s));
-    await logActivity(user!.name, 'edit_server', server.ids, `Updated ${key} on server ${server.ids}`);
+    
+    // Log activity only if this is not the first field being filled
+    if (server.ids || key === 'ids') {
+      await logActivity(user!.name, 'edit_server', server.ids || 'new', `Updated ${key} on server ${server.ids || 'new'}`);
+    }
     toast.success('Saved');
   }
 
   async function handleDelete(s: ServerRow) {
     if (!confirm(`Delete server ${s.ids}?`)) return;
-    await supabase.from('servers').delete().eq('id', s.id);
+    const { error } = await supabase.from('servers').delete().eq('id', s.id);
+    
+    if (error) {
+      toast.error('Failed to delete');
+      return;
+    }
+    
+    // Update local state directly without reloading
+    setServers(prev => prev.filter(server => server.id !== s.id));
+    
     await logActivity(user!.name, 'delete_server', s.ids, `Deleted server ${s.ids}`);
     toast.success('Server deleted');
-    loadServers();
   }
 
   async function handleSuspend(s: ServerRow) {
-    await supabase.from('servers').update({ section: 'suspended' }).eq('id', s.id);
+    if (!confirm(`Suspend server ${s.ids}?`)) return;
+    
+    const { error } = await supabase.from('servers').update({ section: 'suspended' }).eq('id', s.id);
+    
+    if (error) {
+      toast.error('Failed to suspend');
+      return;
+    }
+    
+    // Update local state directly without reloading
+    setServers(prev => prev.map(server => server.id === s.id ? { ...server, section: 'suspended' } : server));
+    
     await logActivity(user!.name, 'suspend_server', s.ids, `Suspended server ${s.ids}`);
     toast.success('Server suspended');
     setTab('suspended');
-    loadServers();
   }
 
   async function handleRenew(s: ServerRow) {
     const newDue = new Date();
     newDue.setMonth(newDue.getMonth() + 1);
-    await supabase.from('servers').update({ section: 'production', n_due: newDue.toISOString().split('T')[0] }).eq('id', s.id);
+    const { error } = await supabase.from('servers').update({ section: 'production', n_due: newDue.toISOString().split('T')[0] }).eq('id', s.id);
+    
+    if (error) {
+      toast.error('Failed to renew');
+      return;
+    }
+    
+    // Update local state directly without reloading
+    setServers(prev => prev.map(server => server.id === s.id ? { ...server, section: 'production', n_due: newDue.toISOString().split('T')[0] } : server));
+    
     await logActivity(user!.name, 'renew_server', s.ids, `Renewed server ${s.ids}`);
     toast.success('Server renewed');
-    loadServers();
   }
 
   const tabs = ['production', 'redirect', 'suspended'] as const;
@@ -261,7 +394,7 @@ export default function ServersPage() {
             </button>
           ))}
         </div>
-        <button onClick={openAdd} className="glass-button rounded-lg px-4 py-1.5 text-sm font-medium flex items-center gap-2">
+        <button onClick={handleAdd} className="glass-button rounded-lg px-4 py-1.5 text-sm font-medium flex items-center gap-2">
           <Plus className="w-4 h-4" /> Add Server
         </button>
       </div>
@@ -305,6 +438,8 @@ export default function ServersPage() {
                           type={col.type}
                           onSave={(v) => handleInlineSave(s, col.key, v)}
                           highlightQuery={search}
+                          fieldKey={col.key}
+                          existingValues={col.key === 'provider' ? providers : col.key === 'email' ? emails : undefined}
                         />
                       </td>
                     ))}
@@ -336,50 +471,6 @@ export default function ServersPage() {
           </table>
         </div>
       </div>
-
-      {/* Add Modal */}
-      {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/60" onClick={() => setModalOpen(false)}>
-          <div className="glass-card rounded-xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-fade-in" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-foreground">Add Server</h2>
-              <button onClick={() => setModalOpen(false)} className="text-muted-foreground hover:text-foreground"><X className="w-5 h-5" /></button>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              {Object.entries(form).filter(([k]) => k !== 'section').map(([key, val]) => (
-                <div key={key}>
-                  <label className="block text-xs text-muted-foreground mb-1 capitalize">{key.replace('_', ' ')}</label>
-                  <input
-                    type={key.includes('d_pro') || key.includes('n_due') ? 'date' : 'text'}
-                    value={val}
-                    onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))}
-                    className="w-full glass-input rounded-lg px-3 py-2 text-sm text-foreground outline-none"
-                  />
-                </div>
-              ))}
-              <div>
-                <label className="block text-xs text-muted-foreground mb-1">Section</label>
-                <select
-                  value={form.section}
-                  onChange={e => setForm(f => ({ ...f, section: e.target.value }))}
-                  className="w-full glass-input rounded-lg px-3 py-2 text-sm text-foreground outline-none bg-card"
-                >
-                  <option value="production">Production</option>
-                  <option value="redirect">Redirect</option>
-                  <option value="suspended">Suspended</option>
-                </select>
-              </div>
-            </div>
-            <div className="flex justify-end gap-2 mt-4">
-              <button onClick={() => setModalOpen(false)} className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors">Cancel</button>
-              <button onClick={handleAdd} disabled={saving} className="glass-button rounded-lg px-4 py-2 text-sm font-medium flex items-center gap-2 disabled:opacity-50">
-                {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-                Add Server
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
