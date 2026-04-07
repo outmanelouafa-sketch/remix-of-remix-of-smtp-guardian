@@ -325,11 +325,19 @@ export default function SmtpHealthPage() {
               </tr>
             </thead>
             <tbody>
-              {filteredServers.map((server, rowIdx) => (
+              {filteredServers.map((server, rowIdx) => {
+                const hasSbl = !!serverFlags[server.id];
+                return (
                 <tr key={server.id} className={`hover:bg-secondary/20 h-9 ${
                   server.created_at?.slice(0, 10) === todayStr ? 'bg-primary/15' : ''
-                }`}>
-                  <td className="sticky left-0 z-10 bg-card px-1.5 py-0.5 text-[11px] font-mono font-medium text-primary border-r border-border border-t">{server.ids}</td>
+                }`}
+                  style={hasSbl ? { background: 'rgba(234, 179, 8, 0.15)' } : undefined}
+                  onContextMenu={e => handleContextMenu(server, e)}
+                >
+                  <td className="sticky left-0 z-10 px-1.5 py-0.5 text-[11px] font-mono font-medium text-primary border-r border-border border-t" style={hasSbl ? { background: 'rgba(234, 179, 8, 0.18)' } : { background: 'hsl(var(--card))' }}>
+                    {hasSbl && <Shield className="w-3 h-3 inline mr-0.5 text-yellow-500" />}
+                    {server.ids}
+                  </td>
                   <td className="sticky left-[70px] z-10 bg-card px-1.5 py-0.5 text-[11px] font-mono text-muted-foreground border-r border-border border-t">{server.ip_main}</td>
                   <td className="sticky left-[180px] z-10 bg-card px-1.5 py-0.5 text-[11px] border-r border-border border-t">
                     {server.n_due && (
