@@ -4,7 +4,14 @@ import { useAuth } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
 import { STATUS_CONFIG, getDrnDays, getDrnColor } from '@/lib/statusColors';
 import { toast } from 'sonner';
-import { ChevronLeft, ChevronRight, Loader2, X, Copy } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Loader2, X, Copy, Shield } from 'lucide-react';
+
+interface ContextMenu {
+  serverId: string;
+  serverIds: string;
+  x: number;
+  y: number;
+}
 
 export default function SmtpHealthPage() {
   const { user } = useAuth();
@@ -18,6 +25,8 @@ export default function SmtpHealthPage() {
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
+  const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null);
+  const [serverFlags, setServerFlags] = useState<Record<string, { id: string; flag_type: string; flagged_by: string; created_at: string }>>({}); 
 
   // Column selection state
   const [selecting, setSelecting] = useState(false);
@@ -38,12 +47,16 @@ export default function SmtpHealthPage() {
     const endDay = new Date(year, month + 1, 0).getDate();
     const endDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(endDay).padStart(2, '0')}`;
 
-    const [sRes, stRes] = await Promise.all([
+    const [sRes, stRes, fRes] = await Promise.all([
       supabase.from('servers').select('*').eq('section', 'production').order('ids'),
       supabase.from('smtp_status').select('*').gte('date', startDate).lte('date', endDate),
+      supabase.from('server_flags').select('*'),
     ]);
     setServers(sRes.data || []);
     setStatuses(stRes.data || []);
+    const flagMap: Record<string, any> = {};
+    (fRes.data || []).forEach((f: any) => { flagMap[f.server_id] = f; });
+    setServerFlags(flagMap);
     setLoading(false);
   }
 
@@ -141,6 +154,40 @@ export default function SmtpHealthPage() {
     setSelectStartRow(null);
     setSelectEndRow(null);
     setSelecting(false);
+  }
+
+  // Close context menu on click anywhere
+  useEffect(() => {
+    if (!contextMenu) return;
+    const close = () => setContextMenu(null);
+    window.addEventListener('click', close);
+    return () => window.removeEventListener('click', close);
+  }, [contextMenu]);
+
+  function handleContextMenu(server: any, e: React.MouseEvent) {
+    e.preventDefault();
+    setContextMenu({ serverId: server.id, serverIds: server.ids, x: e.clientX, y: e.clientY });
+  }
+
+  async function toggleSblFlag(serverId: string, serverIds: string) {
+    const existing = serverFlags[serverId];
+    if (existing) {
+      await supabase.from('server_flags').delete().eq('id', existing.id);
+      setServerFlags(prev => { const n = { ...prev }; delete n[serverId]; return n; });
+      await logActivity(user!.name, 'remove_flag', serverIds, 'Removed SBL flag');
+      toast.success('SBL flag removed');
+    } else {
+      const { data, error } = await supabase.from('server_flags').insert({
+        server_id: serverId,
+        flag_type: 'SBL',
+        flagged_by: user!.name,
+      }).select().single();
+      if (error) { toast.error('Failed to flag server'); return; }
+      setServerFlags(prev => ({ ...prev, [serverId]: data }));
+      await logActivity(user!.name, 'add_flag', serverIds, 'Marked as Spamhaus SBL');
+      toast.success('Marked as Spamhaus SBL');
+    }
+    setContextMenu(null);
   }
 
   function handleCellClick(serverId: string, day: number, e: React.MouseEvent) {
@@ -278,11 +325,19 @@ export default function SmtpHealthPage() {
               </tr>
             </thead>
             <tbody>
-              {filteredServers.map((server, rowIdx) => (
+              {filteredServers.map((server, rowIdx) => {
+                const hasSbl = !!serverFlags[server.id];
+                return (
                 <tr key={server.id} className={`hover:bg-secondary/20 h-9 ${
                   server.created_at?.slice(0, 10) === todayStr ? 'bg-primary/15' : ''
-                }`}>
-                  <td className="sticky left-0 z-10 bg-card px-1.5 py-0.5 text-[11px] font-mono font-medium text-primary border-r border-border border-t">{server.ids}</td>
+                }`}
+                  style={hasSbl ? { background: 'rgba(234, 179, 8, 0.15)' } : undefined}
+                  onContextMenu={e => handleContextMenu(server, e)}
+                >
+                  <td className="sticky left-0 z-10 px-1.5 py-0.5 text-[11px] font-mono font-medium text-primary border-r border-border border-t" style={hasSbl ? { background: 'rgba(234, 179, 8, 0.18)' } : { background: 'hsl(var(--card))' }}>
+                    {hasSbl && <Shield className="w-3 h-3 inline mr-0.5 text-yellow-500" />}
+                    {server.ids}
+                  </td>
                   <td className="sticky left-[70px] z-10 bg-card px-1.5 py-0.5 text-[11px] font-mono text-muted-foreground border-r border-border border-t">{server.ip_main}</td>
                   <td className="sticky left-[180px] z-10 bg-card px-1.5 py-0.5 text-[11px] border-r border-border border-t">
                     {server.n_due && (
@@ -341,7 +396,8 @@ export default function SmtpHealthPage() {
                     );
                   })}
                 </tr>
-              ))}
+                );
+              })}
               {servers.length === 0 && (
                 <tr><td colSpan={3 + daysInMonth} className="text-center py-8 text-muted-foreground text-sm">No production servers</td></tr>
               )}
@@ -387,6 +443,31 @@ export default function SmtpHealthPage() {
               Save
             </button>
           </div>
+        </div>
+      )}
+
+      {/* Context Menu */}
+      {contextMenu && (
+        <div
+          className="fixed z-[100] min-w-[200px] rounded-xl border border-border bg-card shadow-2xl animate-fade-in overflow-hidden"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onClick={e => e.stopPropagation()}
+        >
+          <div className="px-3 py-2 border-b border-border">
+            <span className="text-xs font-semibold text-foreground">{contextMenu.serverIds}</span>
+          </div>
+          <button
+            onClick={() => toggleSblFlag(contextMenu.serverId, contextMenu.serverIds)}
+            className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm hover:bg-muted/50 transition-colors text-left"
+          >
+            <Shield className={`w-4 h-4 ${serverFlags[contextMenu.serverId] ? 'text-yellow-500' : 'text-muted-foreground'}`} />
+            <span className="text-foreground">
+              {serverFlags[contextMenu.serverId] ? 'Remove Spamhaus SBL' : 'Mark as Spamhaus SBL'}
+            </span>
+            {serverFlags[contextMenu.serverId] && (
+              <span className="ml-auto text-[10px] text-muted-foreground">by {serverFlags[contextMenu.serverId].flagged_by}</span>
+            )}
+          </button>
         </div>
       )}
     </div>
