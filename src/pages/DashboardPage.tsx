@@ -211,7 +211,19 @@ export default function DashboardPage() {
                     <Cell key={entry.name} fill={STATUS_COLORS[entry.name] || '#666'} />
                   ))}
                 </Pie>
-                <Tooltip contentStyle={{ background: 'hsl(230,18%,12%)', border: '1px solid hsl(232,22%,18%)', borderRadius: 8, fontSize: 12, color: '#fff' }} />
+                <Tooltip 
+                  contentStyle={{ 
+                    background: 'rgba(26, 29, 39, 0.95)', 
+                    border: '1px solid rgba(79, 142, 247, 0.3)', 
+                    borderRadius: 12, 
+                    fontSize: 12, 
+                    color: '#fff',
+                    backdropFilter: 'blur(10px)',
+                    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)'
+                  }} 
+                  itemStyle={{ color: '#fff' }}
+                  labelStyle={{ color: 'hsl(217, 91%, 64%)', fontWeight: 'bold' }}
+                />
                 <Legend formatter={(value) => <span className="text-xs text-muted-foreground">{STATUS_CONFIG[value]?.label || value}</span>} />
               </PieChart>
             </ResponsiveContainer>
@@ -228,7 +240,19 @@ export default function DashboardPage() {
               <BarChart data={providerData} layout="vertical" margin={{ left: 0, right: 10, top: 5, bottom: 5 }}>
                 <XAxis type="number" hide />
                 <YAxis type="category" dataKey="name" width={70} tick={{ fontSize: 11, fill: 'hsl(215,20%,70%)' }} />
-                <Tooltip contentStyle={{ background: 'hsl(230,18%,12%)', border: '1px solid hsl(232,22%,18%)', borderRadius: 8, fontSize: 12, color: '#fff' }} />
+                <Tooltip 
+                  contentStyle={{ 
+                    background: 'rgba(26, 29, 39, 0.95)', 
+                    border: '1px solid rgba(79, 142, 247, 0.3)', 
+                    borderRadius: 12, 
+                    fontSize: 12, 
+                    color: '#fff',
+                    backdropFilter: 'blur(10px)',
+                    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)'
+                  }} 
+                  itemStyle={{ color: '#fff' }}
+                  labelStyle={{ color: 'hsl(217, 91%, 64%)', fontWeight: 'bold' }}
+                />
                 <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={16}>
                   {providerData.map((_, i) => (
                     <Cell key={i} fill={PROVIDER_COLORS[i % PROVIDER_COLORS.length]} />
@@ -248,7 +272,19 @@ export default function DashboardPage() {
             <CartesianGrid strokeDasharray="3 3" stroke="hsl(232,22%,18%)" />
             <XAxis dataKey="date" tick={{ fontSize: 10, fill: 'hsl(215,20%,70%)' }} />
             <YAxis allowDecimals={false} tick={{ fontSize: 10, fill: 'hsl(215,20%,70%)' }} />
-            <Tooltip contentStyle={{ background: 'hsl(230,18%,12%)', border: '1px solid hsl(232,22%,18%)', borderRadius: 8, fontSize: 12, color: '#fff' }} />
+            <Tooltip 
+              contentStyle={{ 
+                background: 'rgba(26, 29, 39, 0.95)', 
+                border: '1px solid rgba(79, 142, 247, 0.3)', 
+                borderRadius: 12, 
+                fontSize: 12, 
+                color: '#fff',
+                backdropFilter: 'blur(10px)',
+                boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)'
+              }} 
+              itemStyle={{ color: '#fff' }}
+              labelStyle={{ color: 'hsl(217, 91%, 64%)', fontWeight: 'bold' }}
+            />
             <Area type="monotone" dataKey="CLEAN" stackId="1" stroke="#48bb78" fill="#48bb78" fillOpacity={0.4} />
             <Area type="monotone" dataKey="BL" stackId="1" stroke="#e53e3e" fill="#e53e3e" fillOpacity={0.4} />
             <Area type="monotone" dataKey="SH" stackId="1" stroke="#ffc800" fill="#ffc800" fillOpacity={0.4} />
