@@ -26,7 +26,7 @@ export default function SmtpHealthPage() {
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
   const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null);
-  const [serverFlags, setServerFlags] = useState<Record<string, { flag_type: string; flagged_by: string; created_at: string }>>({}); 
+  const [serverFlags, setServerFlags] = useState<Record<string, { id: string; flag_type: string; flagged_by: string; created_at: string }>>({}); 
 
   // Column selection state
   const [selecting, setSelecting] = useState(false);
