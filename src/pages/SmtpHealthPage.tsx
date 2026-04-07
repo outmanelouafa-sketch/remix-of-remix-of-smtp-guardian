@@ -47,12 +47,16 @@ export default function SmtpHealthPage() {
     const endDay = new Date(year, month + 1, 0).getDate();
     const endDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(endDay).padStart(2, '0')}`;
 
-    const [sRes, stRes] = await Promise.all([
+    const [sRes, stRes, fRes] = await Promise.all([
       supabase.from('servers').select('*').eq('section', 'production').order('ids'),
       supabase.from('smtp_status').select('*').gte('date', startDate).lte('date', endDate),
+      supabase.from('server_flags').select('*'),
     ]);
     setServers(sRes.data || []);
     setStatuses(stRes.data || []);
+    const flagMap: Record<string, any> = {};
+    (fRes.data || []).forEach((f: any) => { flagMap[f.server_id] = f; });
+    setServerFlags(flagMap);
     setLoading(false);
   }
 
