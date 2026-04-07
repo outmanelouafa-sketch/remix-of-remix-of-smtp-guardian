@@ -99,6 +99,21 @@ export default function SmtpHealthPage() {
     return () => window.removeEventListener('mouseup', handleMouseUp);
   }, [handleMouseUp]);
 
+  // Ctrl+C shortcut
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'c' && selectedCells.size > 0) {
+        e.preventDefault();
+        copySelectedCells();
+      }
+      if (e.key === 'Escape' && selectedCells.size > 0) {
+        clearSelection();
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedCells, selectCol, selectStartRow, selectEndRow]);
+
   function copySelectedCells() {
     if (selectedCells.size === 0 || selectCol === null) return;
     const start = Math.min(selectStartRow!, selectEndRow!);
@@ -237,7 +252,7 @@ export default function SmtpHealthPage() {
 
       {/* Tip */}
       {selectedCells.size === 0 && (
-        <p className="text-[10px] text-muted-foreground/60">💡 Double-click a cell then drag down to select a column range and copy</p>
+        <p className="text-[10px] text-muted-foreground/60">💡 Double-click a cell then drag down to select · Ctrl+C to copy · Esc to cancel</p>
       )}
 
       {/* Grid */}
@@ -282,7 +297,7 @@ export default function SmtpHealthPage() {
                       <td
                         key={d}
                         className={`px-0 py-0 border-t border-border cursor-pointer hover:bg-muted/30 transition-colors w-[64px] min-w-[64px] max-w-[64px] h-9 ${
-                          isSelected ? 'ring-2 ring-inset ring-primary bg-primary/10' : ''
+                          isSelected ? 'bg-primary/20 outline outline-2 outline-primary/60 outline-offset-[-2px]' : ''
                         }`}
                         style={isToday(d) ? { borderLeft: '2px solid hsl(217 91% 64%)', borderRight: '2px solid hsl(217 91% 64%)' } : undefined}
                         onClick={e => {
