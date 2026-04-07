@@ -396,7 +396,8 @@ export default function SmtpHealthPage() {
                     );
                   })}
                 </tr>
-              ))}
+                );
+              })}
               {servers.length === 0 && (
                 <tr><td colSpan={3 + daysInMonth} className="text-center py-8 text-muted-foreground text-sm">No production servers</td></tr>
               )}
