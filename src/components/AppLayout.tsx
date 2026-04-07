@@ -92,9 +92,10 @@ export default function AppLayout() {
     <div className="min-h-screen flex bg-background">
       {/* Desktop Sidebar */}
       <aside
-        className={`hidden md:flex flex-col border-r border-border bg-card transition-all duration-300 ${
+        className={`hidden md:flex flex-col border-r border-border bg-card transition-all duration-300 fixed top-0 left-0 h-screen ${
           collapsed ? 'w-16' : 'w-56'
         }`}
+        style={{ zIndex: 40 }}
       >
         {sidebarContent}
         <button
@@ -130,7 +131,7 @@ export default function AppLayout() {
         </div>
       )}
 
-      <main className="flex-1 overflow-auto">
+      <main className="flex-1 overflow-auto" style={{ marginLeft: collapsed ? '64px' : '224px' }}>
         <div className="p-4 md:p-6 max-w-[1600px] mx-auto">
           <Outlet />
         </div>
