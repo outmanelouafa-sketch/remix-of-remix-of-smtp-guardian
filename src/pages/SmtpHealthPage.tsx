@@ -258,7 +258,7 @@ export default function SmtpHealthPage() {
       {/* Grid */}
       <div className="glass-card rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
-          <table ref={tableRef} className="w-full border-collapse text-[11px] select-none">
+          <table ref={tableRef} className="w-full border-collapse text-[11px]">
             <thead>
               <tr>
                 <th className="sticky left-0 z-10 bg-card px-1.5 py-1.5 text-left text-[10px] text-muted-foreground uppercase font-semibold border-r border-border w-[70px] min-w-[70px]">IDS</th>
