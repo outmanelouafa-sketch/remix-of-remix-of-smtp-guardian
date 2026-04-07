@@ -252,7 +252,7 @@ export default function SmtpHealthPage() {
 
       {/* Tip */}
       {selectedCells.size === 0 && (
-        <p className="text-[10px] text-muted-foreground/60">💡 Double-click a cell then drag down to select a column range and copy</p>
+        <p className="text-[10px] text-muted-foreground/60">💡 Double-click a cell then drag down to select · Ctrl+C to copy · Esc to cancel</p>
       )}
 
       {/* Grid */}
