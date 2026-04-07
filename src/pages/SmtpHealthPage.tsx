@@ -4,7 +4,14 @@ import { useAuth } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
 import { STATUS_CONFIG, getDrnDays, getDrnColor } from '@/lib/statusColors';
 import { toast } from 'sonner';
-import { ChevronLeft, ChevronRight, Loader2, X, Copy } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Loader2, X, Copy, Shield } from 'lucide-react';
+
+interface ContextMenu {
+  serverId: string;
+  serverIds: string;
+  x: number;
+  y: number;
+}
 
 export default function SmtpHealthPage() {
   const { user } = useAuth();
@@ -18,6 +25,8 @@ export default function SmtpHealthPage() {
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
+  const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null);
+  const [serverFlags, setServerFlags] = useState<Record<string, { flag_type: string; flagged_by: string; created_at: string }>>({}); 
 
   // Column selection state
   const [selecting, setSelecting] = useState(false);
