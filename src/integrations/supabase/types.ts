@@ -82,6 +82,38 @@ export type Database = {
           },
         ]
       }
+      server_flags: {
+        Row: {
+          created_at: string
+          flag_type: string
+          flagged_by: string
+          id: string
+          server_id: string
+        }
+        Insert: {
+          created_at?: string
+          flag_type: string
+          flagged_by: string
+          id?: string
+          server_id: string
+        }
+        Update: {
+          created_at?: string
+          flag_type?: string
+          flagged_by?: string
+          id?: string
+          server_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "server_flags_server_id_fkey"
+            columns: ["server_id"]
+            isOneToOne: false
+            referencedRelation: "servers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       servers: {
         Row: {
           created_at: string
