@@ -4,7 +4,7 @@ import { useAuth } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
 import { getDrnDays, getDrnColor } from '@/lib/statusColors';
 import { toast } from 'sonner';
-import { Plus, Trash2, PauseCircle, RotateCcw, Loader2, X, Check } from 'lucide-react';
+import { Plus, Trash2, PauseCircle, RotateCcw, Loader2, X, Check, AlertTriangle, Bell, Users } from 'lucide-react';
 
 interface ServerRow {
   id: string; ids: string; ip_main: string; domain: string; provider: string; rdns: string;
@@ -258,10 +258,188 @@ export default function ServersPage() {
   const [search, setSearch] = useState('');
   const [filterProvider, setFilterProvider] = useState('');
   const [filterDomain, setFilterDomain] = useState('');
+  const [filterSmtpManager, setFilterSmtpManager] = useState('');
+  const [serverAlerts, setServerAlerts] = useState<any[]>([]);
+  const [showAlerts, setShowAlerts] = useState(true);
+  
+  // Assignment modal state
+  const [showAssignModal, setShowAssignModal] = useState(false);
+  const [smtpManagers, setSmtpManagers] = useState<any[]>([]);
+  const [selectedManager, setSelectedManager] = useState('');
+  const [selectedServers, setSelectedServers] = useState<Set<string>>(new Set());
+  const [assignments, setAssignments] = useState<any[]>([]);
+  const [assigning, setAssigning] = useState(false);
+  
+  // Single server assignment popup
+  const [singleAssignPopup, setSingleAssignPopup] = useState<{ serverId: string; serverIds: string; x: number; y: number } | null>(null);
 
   useEffect(() => {
     loadServers();
+    loadServerAlerts();
+    loadSmtpManagers();
+    loadAssignments();
+    // Subscribe to new alerts
+    const channel = supabase.channel('server-alerts')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'activity_log', filter: 'action_type=eq.server_alert' }, 
+        (payload) => {
+          setServerAlerts(prev => [payload.new, ...prev]);
+          toast.warning(`New server alert: ${payload.new.server_ids}`, { duration: 5000 });
+        }
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
   }, []);
+
+  // Close single assign popup on click outside
+  useEffect(() => {
+    if (!singleAssignPopup) return;
+    const close = () => setSingleAssignPopup(null);
+    window.addEventListener('click', close);
+    return () => window.removeEventListener('click', close);
+  }, [singleAssignPopup]);
+
+  async function loadSmtpManagers() {
+    const { data } = await supabase
+      .from('users')
+      .select('*')
+      .eq('role', 'smtp_manager')
+      .order('name');
+    setSmtpManagers(data || []);
+  }
+
+  async function loadAssignments() {
+    const { data } = await supabase
+      .from('server_smtp_assignments')
+      .select('*, users(name)')
+      .order('assigned_at', { ascending: false });
+    setAssignments(data || []);
+  }
+
+  async function handleAssignServers() {
+    if (!selectedManager) {
+      toast.error('Please select an SMTP manager');
+      return;
+    }
+    if (selectedServers.size === 0) {
+      toast.error('Please select at least one server');
+      return;
+    }
+
+    setAssigning(true);
+    
+    try {
+      // Delete existing assignments for these servers
+      await supabase
+        .from('server_smtp_assignments')
+        .delete()
+        .in('server_id', Array.from(selectedServers));
+      
+      // Insert new assignments
+      const assignmentsToInsert = Array.from(selectedServers).map(serverId => ({
+        server_id: serverId,
+        smtp_manager_id: selectedManager,
+        assigned_by: user!.name,
+      }));
+
+      const { error } = await supabase
+        .from('server_smtp_assignments')
+        .insert(assignmentsToInsert);
+
+      if (error) throw error;
+
+      // Log activity
+      await logActivity(
+        user!.name,
+        'ASSIGNED_SERVERS',
+        `${selectedServers.size} servers`,
+        `Assigned ${selectedServers.size} servers to ${smtpManagers.find(m => m.id === selectedManager)?.name}`
+      );
+
+      toast.success(`Assigned ${selectedServers.size} server(s) successfully`);
+      setShowAssignModal(false);
+      setSelectedServers(new Set());
+      setSelectedManager('');
+      loadAssignments();
+    } catch (error: any) {
+      toast.error('Failed to assign servers: ' + error.message);
+    } finally {
+      setAssigning(false);
+    }
+  }
+
+  function toggleServerSelection(serverId: string) {
+    setSelectedServers(prev => {
+      const next = new Set(prev);
+      if (next.has(serverId)) {
+        next.delete(serverId);
+      } else {
+        next.add(serverId);
+      }
+      return next;
+    });
+  }
+
+  function selectAllServers() {
+    const currentServers = filtered.map(s => s.id);
+    const allSelected = currentServers.every(id => selectedServers.has(id));
+    
+    if (allSelected) {
+      setSelectedServers(new Set());
+    } else {
+      setSelectedServers(new Set(currentServers));
+    }
+  }
+
+  async function handleSingleAssign(serverId: string, serverIds: string, managerId: string) {
+    try {
+      const manager = smtpManagers.find(m => m.id === managerId);
+      if (!manager) {
+        toast.error('Manager not found');
+        return;
+      }
+
+      // Delete existing assignments
+      await supabase
+        .from('server_smtp_assignments')
+        .delete()
+        .eq('server_id', serverId);
+
+      // Insert new assignment
+      const { error } = await supabase
+        .from('server_smtp_assignments')
+        .insert({
+          server_id: serverId,
+          smtp_manager_id: managerId,
+          assigned_by: user!.name,
+        });
+
+      if (error) throw error;
+
+      await logActivity(
+        user!.name,
+        'ASSIGNED_SERVERS',
+        serverIds,
+        `Reassigned server ${serverIds} to ${manager.name}`
+      );
+
+      toast.success(`Assigned ${serverIds} to ${manager.name}`);
+      setSingleAssignPopup(null);
+      loadAssignments();
+    } catch (error: any) {
+      toast.error('Failed to assign server: ' + error.message);
+    }
+  }
+
+  async function loadServerAlerts() {
+    // Load recent server alerts (last 24 hours)
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const { data } = await supabase.from('activity_log')
+      .select('*')
+      .eq('action_type', 'server_alert')
+      .gte('created_at', yesterday)
+      .order('created_at', { ascending: false });
+    setServerAlerts(data || []);
+  }
 
   async function loadServers() {
     setLoading(true);
@@ -280,7 +458,15 @@ export default function ServersPage() {
     const matchesSearch = !q || s.ids?.toLowerCase().includes(q) || s.ip_main?.toLowerCase().includes(q) || s.domain?.toLowerCase().includes(q) || s.email?.toLowerCase().includes(q) || s.notes?.toLowerCase().includes(q);
     const matchesProvider = !filterProvider || s.provider === filterProvider;
     const matchesDomain = !filterDomain || s.domain?.toLowerCase().includes(filterDomain.toLowerCase());
-    return matchesSearch && matchesProvider && matchesDomain;
+    
+    // Filter by SMTP manager assignment
+    let matchesSmtpManager = true;
+    if (filterSmtpManager) {
+      const serverAssignments = assignments.filter(a => a.server_id === s.id);
+      matchesSmtpManager = serverAssignments.some(a => a.smtp_manager_id === filterSmtpManager);
+    }
+    
+    return matchesSearch && matchesProvider && matchesDomain && matchesSmtpManager;
   });
 
   const providers = [...new Set(servers.filter(s => s.section === tab && s.provider).map(s => s.provider))];
@@ -380,6 +566,21 @@ export default function ServersPage() {
 
   return (
     <div className="space-y-4 animate-fade-in">
+      {/* Quick Alert Summary */}
+      {serverAlerts.length > 0 && (user?.role === 'server_manager' || user?.role === 'boss') && (
+        <div className="glass-card rounded-xl p-3 flex items-center justify-between" style={{ borderLeft: '4px solid #ed8936' }}>
+          <div className="flex items-center gap-2">
+            <Bell className="w-4 h-4 text-status-ecr animate-pulse" />
+            <span className="text-sm text-foreground">
+              <strong>{serverAlerts.length}</strong> server alert{serverAlerts.length > 1 ? 's' : ''} in last 24h
+            </span>
+          </div>
+          <a href="/notifications" className="text-xs text-primary hover:underline font-medium">
+            View All →
+          </a>
+        </div>
+      )}
+
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex gap-1">
           {tabs.map(t => (
@@ -394,9 +595,19 @@ export default function ServersPage() {
             </button>
           ))}
         </div>
-        <button onClick={handleAdd} className="glass-button rounded-lg px-4 py-1.5 text-sm font-medium flex items-center gap-2">
-          <Plus className="w-4 h-4" /> Add Server
-        </button>
+        <div className="flex gap-2">
+          {(user?.role === 'boss' || user?.role === 'server_manager') && (
+            <button 
+              onClick={() => setShowAssignModal(true)} 
+              className="glass-button rounded-lg px-4 py-1.5 text-sm font-medium flex items-center gap-2"
+            >
+              <Users className="w-4 h-4" /> Assign SMTP Manager
+            </button>
+          )}
+          <button onClick={handleAdd} className="glass-button rounded-lg px-4 py-1.5 text-sm font-medium flex items-center gap-2">
+            <Plus className="w-4 h-4" /> Add Server
+          </button>
+        </div>
       </div>
 
       <div className="flex gap-2 flex-wrap">
@@ -405,8 +616,16 @@ export default function ServersPage() {
           <option value="">All Providers</option>
           {providers.map(p => <option key={p} value={p}>{p}</option>)}
         </select>
-        {(search || filterProvider) && (
-          <button onClick={() => { setSearch(''); setFilterProvider(''); setFilterDomain(''); }} className="text-xs text-muted-foreground hover:text-foreground px-2">Clear</button>
+        {(user?.role === 'boss' || user?.role === 'server_manager') && smtpManagers.length > 0 && (
+          <select value={filterSmtpManager} onChange={e => setFilterSmtpManager(e.target.value)} className="glass-input rounded-lg px-3 py-1.5 text-sm text-foreground outline-none bg-card">
+            <option value="">All SMTP Managers</option>
+            {smtpManagers.map(manager => (
+              <option key={manager.id} value={manager.id}>{manager.name}</option>
+            ))}
+          </select>
+        )}
+        {(search || filterProvider || filterSmtpManager) && (
+          <button onClick={() => { setSearch(''); setFilterProvider(''); setFilterDomain(''); setFilterSmtpManager(''); }} className="text-xs text-muted-foreground hover:text-foreground px-2">Clear</button>
         )}
         <span className="text-xs text-muted-foreground self-center ml-auto">{filtered.length} result{filtered.length !== 1 ? 's' : ''}</span>
       </div>
@@ -416,6 +635,16 @@ export default function ServersPage() {
           <table className="w-full dense-table border-collapse">
             <thead>
               <tr className="text-left">
+                {(user?.role === 'boss' || user?.role === 'server_manager') && (
+                  <th className="border-r border-border w-10">
+                    <input
+                      type="checkbox"
+                      checked={filtered.length > 0 && filtered.every(s => selectedServers.has(s.id))}
+                      onChange={selectAllServers}
+                      className="w-4 h-4 cursor-pointer"
+                    />
+                  </th>
+                )}
                 {EDITABLE_COLUMNS.map(col => (
                   <th key={col.key} className="border-r border-border">{col.label}</th>
                 ))}
@@ -431,6 +660,16 @@ export default function ServersPage() {
                 const drn = getDrnDays(s.n_due);
                 return (
                   <tr key={s.id} className="hover:bg-secondary/30 transition-colors">
+                    {(user?.role === 'boss' || user?.role === 'server_manager') && (
+                      <td className="border-r border-border">
+                        <input
+                          type="checkbox"
+                          checked={selectedServers.has(s.id)}
+                          onChange={() => toggleServerSelection(s.id)}
+                          className="w-4 h-4 cursor-pointer"
+                        />
+                      </td>
+                    )}
                     {EDITABLE_COLUMNS.map(col => (
                       <td key={col.key} className={`border-r border-border ${col.key === 'ids' ? 'font-mono font-medium text-primary' : ''} ${col.key === 'ip_main' ? 'font-mono' : ''}`}>
                         <InlineCell
@@ -455,6 +694,18 @@ export default function ServersPage() {
                     </td>
                     <td>
                       <div className="flex items-center gap-1">
+                        {(user?.role === 'boss' || user?.role === 'server_manager') && smtpManagers.length > 0 && (
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSingleAssignPopup({ serverId: s.id, serverIds: s.ids, x: e.clientX, y: e.clientY });
+                            }} 
+                            className="p-1 text-muted-foreground hover:text-primary transition-colors"
+                            title="Assign to SMTP Manager"
+                          >
+                            <Users className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                         {tab !== 'suspended' && (
                           <button onClick={() => handleSuspend(s)} className="p-1 text-muted-foreground hover:text-status-ecr transition-colors"><PauseCircle className="w-3.5 h-3.5" /></button>
                         )}
@@ -471,6 +722,173 @@ export default function ServersPage() {
           </table>
         </div>
       </div>
+
+      {/* Assignment Modal */}
+      {showAssignModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="glass-card rounded-xl p-6 w-full max-w-2xl mx-4 max-h-[80vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold text-foreground flex items-center gap-2">
+                <Users className="w-5 h-5 text-primary" />
+                Assign Servers to SMTP Manager
+              </h2>
+              <button 
+                onClick={() => {
+                  setShowAssignModal(false);
+                  setSelectedServers(new Set());
+                  setSelectedManager('');
+                }}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* SMTP Manager Selection */}
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-2">
+                  Select SMTP Manager
+                </label>
+                <select
+                  value={selectedManager}
+                  onChange={(e) => setSelectedManager(e.target.value)}
+                  className="w-full glass-input rounded-lg px-3 py-2 text-sm text-foreground outline-none bg-card"
+                >
+                  <option value="">Choose an SMTP manager...</option>
+                  {smtpManagers.map(manager => (
+                    <option key={manager.id} value={manager.id}>
+                      {manager.name} ({manager.email})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Server Selection */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-medium text-foreground">
+                    Select Servers ({selectedServers.size} selected)
+                  </label>
+                  <button
+                    onClick={selectAllServers}
+                    className="text-xs text-primary hover:underline"
+                  >
+                    {filtered.length > 0 && filtered.every(s => selectedServers.has(s.id))
+                      ? 'Deselect All'
+                      : 'Select All'}
+                  </button>
+                </div>
+                <div className="border border-border rounded-lg max-h-64 overflow-y-auto">
+                  {filtered.length === 0 ? (
+                    <div className="p-4 text-center text-sm text-muted-foreground">
+                      No servers in current view
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-border">
+                      {filtered.map(server => {
+                        const assignment = assignments.find(a => a.server_id === server.id);
+                        return (
+                          <div
+                            key={server.id}
+                            className={`flex items-center gap-3 p-3 hover:bg-secondary/30 cursor-pointer transition-colors ${
+                              selectedServers.has(server.id) ? 'bg-primary/10' : ''
+                            }`}
+                            onClick={() => toggleServerSelection(server.id)}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={selectedServers.has(server.id)}
+                              onChange={() => toggleServerSelection(server.id)}
+                              className="w-4 h-4 cursor-pointer"
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono text-sm font-medium text-primary">
+                                  {server.ids}
+                                </span>
+                                {assignment && (
+                                  <span className="text-xs text-muted-foreground">
+                                    (Currently: {assignment.users?.name || 'Assigned'})
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-xs text-muted-foreground truncate">
+                                {server.ip_main} {server.domain && `• ${server.domain}`}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex justify-end gap-2 pt-2 border-t border-border">
+                <button
+                  onClick={() => {
+                    setShowAssignModal(false);
+                    setSelectedServers(new Set());
+                    setSelectedManager('');
+                  }}
+                  className="px-4 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+                  disabled={assigning}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleAssignServers}
+                  disabled={assigning || !selectedManager || selectedServers.size === 0}
+                  className="px-4 py-2 rounded-lg text-sm font-medium glass-button disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  {assigning ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Assigning...
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-4 h-4" />
+                      Assign {selectedServers.size} Server{selectedServers.size !== 1 ? 's' : ''}
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Single Server Assignment Popup */}
+      {singleAssignPopup && (
+        <div
+          className="fixed z-[100] min-w-[220px] rounded-xl border border-border bg-card shadow-2xl animate-fade-in overflow-hidden"
+          style={{ left: singleAssignPopup.x, top: singleAssignPopup.y }}
+          onClick={e => e.stopPropagation()}
+        >
+          <div className="px-3 py-2 border-b border-border bg-muted/30">
+            <span className="text-xs font-semibold text-foreground">Assign to Manager</span>
+          </div>
+          <div className="max-h-60 overflow-y-auto py-1">
+            {smtpManagers.map(manager => (
+              <button
+                key={manager.id}
+                onClick={() => handleSingleAssign(singleAssignPopup.serverId, singleAssignPopup.serverIds, manager.id)}
+                className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-muted/50 transition-colors text-left"
+              >
+                <Users className="w-3.5 h-3.5 text-muted-foreground" />
+                <div className="flex-1">
+                  <div className="text-foreground text-xs font-medium">{manager.name}</div>
+                  <div className="text-muted-foreground text-[10px]">{manager.email}</div>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

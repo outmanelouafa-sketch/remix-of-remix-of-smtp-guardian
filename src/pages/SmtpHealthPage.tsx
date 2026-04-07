@@ -4,7 +4,7 @@ import { useAuth } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
 import { STATUS_CONFIG, getDrnDays, getDrnColor } from '@/lib/statusColors';
 import { toast } from 'sonner';
-import { ChevronLeft, ChevronRight, Loader2, X, Copy, Shield } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Loader2, X, Copy, Shield, Users, UserPlus } from 'lucide-react';
 
 interface ContextMenu {
   serverId: string;
@@ -27,6 +27,23 @@ export default function SmtpHealthPage() {
   const [search, setSearch] = useState('');
   const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null);
   const [serverFlags, setServerFlags] = useState<Record<string, { id: string; flag_type: string; flagged_by: string; created_at: string }>>({}); 
+  
+  // SMTP Manager filter state (for boss/server_manager only)
+  const [smtpManagers, setSmtpManagers] = useState<any[]>([]);
+  const [selectedSmtpManager, setSelectedSmtpManager] = useState<string>('');
+  
+  // Assignment context menu state
+  const [showAssignMenu, setShowAssignMenu] = useState(false);
+  const [assignMenuPosition, setAssignMenuPosition] = useState<{ x: number; y: number } | null>(null);
+  
+  // Suspended/Deleted servers
+  const [showSuspended, setShowSuspended] = useState(false);
+  const [suspendedServers, setSuspendedServers] = useState<any[]>([]);
+  const [section, setSection] = useState<'production' | 'suspended'>('production');
+  const [allSectionServers, setAllSectionServers] = useState<Record<string, any[]>>({
+    production: [],
+    suspended: []
+  });
 
   // Column selection state
   const [selecting, setSelecting] = useState(false);
@@ -39,25 +56,119 @@ export default function SmtpHealthPage() {
 
   useEffect(() => {
     loadData();
+    loadSmtpManagers();
+    
+    // Real-time subscription for assignment changes
+    const assignmentChannel = supabase.channel('smtp-assignments')
+      .on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'server_smtp_assignments' }, 
+        () => loadData()
+      )
+      .subscribe();
+    
+    return () => { supabase.removeChannel(assignmentChannel); };
   }, [month, year]);
 
-  async function loadData() {
-    setLoading(true);
+  // Reload data when SMTP manager changes (without showing loading)
+  useEffect(() => {
+    if (user?.role === 'boss' || user?.role === 'server_manager') {
+      loadData(true); // skipLoading = true
+    }
+  }, [selectedSmtpManager]);
+
+  // Instant section switching (no reload)
+  useEffect(() => {
+    if (user?.role === 'boss' || user?.role === 'server_manager') {
+      setServers(allSectionServers[section] || []);
+    }
+  }, [section]);
+
+  async function loadSmtpManagers() {
+    // Only load for boss and server_manager
+    if (user?.role === 'boss' || user?.role === 'server_manager') {
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('role', 'smtp_manager')
+        .order('name');
+      
+      if (error) {
+        console.error('Error loading SMTP managers:', error);
+        return;
+      }
+      
+      console.log('Loaded SMTP managers:', data);
+      setSmtpManagers(data || []);
+    }
+  }
+
+  async function loadData(skipLoading = false) {
+    if (!skipLoading) setLoading(true);
     const startDate = `${year}-${String(month + 1).padStart(2, '0')}-01`;
     const endDay = new Date(year, month + 1, 0).getDate();
     const endDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(endDay).padStart(2, '0')}`;
 
-    const [sRes, stRes, fRes] = await Promise.all([
-      supabase.from('servers').select('*').eq('section', 'production').order('ids'),
-      supabase.from('smtp_status').select('*').gte('date', startDate).lte('date', endDate),
-      supabase.from('server_flags').select('*'),
-    ]);
-    setServers(sRes.data || []);
-    setStatuses(stRes.data || []);
-    const flagMap: Record<string, any> = {};
-    (fRes.data || []).forEach((f: any) => { flagMap[f.server_id] = f; });
-    setServerFlags(flagMap);
-    setLoading(false);
+    // Check if current user is smtp_manager
+    const isSmtpManager = user?.role === 'smtp_manager';
+    const canViewAllSections = user?.role === 'boss' || user?.role === 'server_manager';
+
+    // Load servers for all sections if user can view all
+    if (canViewAllSections) {
+      const [prodRes, suspRes, stRes, fRes] = await Promise.all([
+        supabase.from('servers').select('*').eq('section', 'production').order('ids'),
+        supabase.from('servers').select('*').eq('section', 'suspended').order('ids'),
+        supabase.from('smtp_status').select('*').gte('date', startDate).lte('date', endDate),
+        supabase.from('server_flags').select('*'),
+      ]);
+
+      setAllSectionServers({
+        production: prodRes.data || [],
+        suspended: suspRes.data || []
+      });
+      setServers(section === 'production' ? (prodRes.data || []) : (suspRes.data || []));
+      setStatuses(stRes.data || []);
+      const flagMap: Record<string, any> = {};
+      (fRes.data || []).forEach((f: any) => { flagMap[f.server_id] = f; });
+      setServerFlags(flagMap);
+    } else {
+      // SMTP manager - only load their assigned servers
+      let serversQuery = supabase
+        .from('servers')
+        .select('*')
+        .eq('section', section);
+
+      if (user?.id) {
+        const { data: assignments } = await supabase
+          .from('server_smtp_assignments')
+          .select('server_id')
+          .eq('smtp_manager_id', user.id);
+        
+        const assignedServerIds = assignments?.map(a => a.server_id) || [];
+        
+        if (assignedServerIds.length === 0) {
+          setServers([]);
+          setStatuses([]);
+          setServerFlags({});
+          if (!skipLoading) setLoading(false);
+          return;
+        }
+        
+        serversQuery = serversQuery.in('id', assignedServerIds);
+      }
+
+      const [sRes, stRes, fRes] = await Promise.all([
+        serversQuery.order('ids'),
+        supabase.from('smtp_status').select('*').gte('date', startDate).lte('date', endDate),
+        supabase.from('server_flags').select('*'),
+      ]);
+      setServers(sRes.data || []);
+      setStatuses(stRes.data || []);
+      const flagMap: Record<string, any> = {};
+      (fRes.data || []).forEach((f: any) => { flagMap[f.server_id] = f; });
+      setServerFlags(flagMap);
+    }
+    
+    if (!skipLoading) setLoading(false);
   }
 
   const daysInMonth = new Date(year, month + 1, 0).getDate();
@@ -166,6 +277,7 @@ export default function SmtpHealthPage() {
 
   function handleContextMenu(server: any, e: React.MouseEvent) {
     e.preventDefault();
+    setShowAssignMenu(false); // Reset submenu state
     setContextMenu({ serverId: server.id, serverIds: server.ids, x: e.clientX, y: e.clientY });
   }
 
@@ -188,6 +300,55 @@ export default function SmtpHealthPage() {
       toast.success('Marked as Spamhaus SBL');
     }
     setContextMenu(null);
+  }
+
+  async function assignServerToManager(serverId: string, serverIds: string, managerId: string) {
+    console.log('Assigning server:', { serverId, serverIds, managerId });
+    try {
+      // Get manager name
+      const manager = smtpManagers.find(m => m.id === managerId);
+      console.log('Found manager:', manager);
+      
+      if (!manager) {
+        toast.error('Manager not found');
+        return;
+      }
+
+      // Delete existing assignments for this server
+      await supabase
+        .from('server_smtp_assignments')
+        .delete()
+        .eq('server_id', serverId);
+
+      // Insert new assignment
+      const { error } = await supabase
+        .from('server_smtp_assignments')
+        .insert({
+          server_id: serverId,
+          smtp_manager_id: managerId,
+          assigned_by: user!.name,
+        });
+
+      if (error) throw error;
+
+      // Log activity
+      await logActivity(
+        user!.name,
+        'ASSIGNED_SERVERS',
+        serverIds,
+        `Reassigned server ${serverIds} to ${manager.name}`
+      );
+
+      toast.success(`Assigned ${serverIds} to ${manager.name}`);
+      setShowAssignMenu(false);
+      setContextMenu(null);
+      
+      // Reload data to reflect changes
+      loadData(true);
+    } catch (error: any) {
+      console.error('Assignment error:', error);
+      toast.error('Failed to assign server: ' + error.message);
+    }
   }
 
   function handleCellClick(serverId: string, day: number, e: React.MouseEvent) {
@@ -245,7 +406,48 @@ export default function SmtpHealthPage() {
 
     const srv = servers.find(s => s.id === popup.serverId);
     await logActivity(user!.name, 'update_smtp_status', srv?.ids, `Set ${selectedStatus} for ${popup.date}`);
-    toast.success('Status updated');
+    
+    // Check if status is problematic and notify server manager
+    const problematicStatuses = ['ECR', 'TO', 'EXP'];
+    
+    if (problematicStatuses.includes(selectedStatus) && srv) {
+      const statusMessages: Record<string, string> = {
+        ECR: 'Error Connection Refused',
+        TO: 'Connection Timed Out',
+        EXP: 'Server Expired'
+      };
+      
+      const alertMessage = `⚠️ SERVER ISSUE DETECTED\n\n` +
+        `Server IDS: ${srv.ids}\n` +
+        `Server IP: ${srv.ip_main || 'N/A'}\n` +
+        `Issue: ${statusMessages[selectedStatus]}\n` +
+        `Status: ${selectedStatus}\n` +
+        `Date: ${popup.date}\n` +
+        `Reported by: ${user!.name} (${user?.role})\n` +
+        (note ? `Note: ${note}` : '');
+      
+      // Log as server alert for server_manager to see
+      await logActivity(user!.name, 'server_alert', srv.ids, alertMessage);
+      
+      // Show warning toast notification
+      toast.warning(
+        <div>
+          <div className="font-bold text-sm">⚠️ Server Issue Detected</div>
+          <div className="text-xs mt-1">
+            <strong>{srv.ids}</strong> - {statusMessages[selectedStatus]}
+          </div>
+          <div className="text-xs mt-1 text-muted-foreground">
+            Server Manager has been notified
+          </div>
+        </div>,
+        { 
+          duration: 6000,
+        }
+      );
+    } else {
+      toast.success('Status updated');
+    }
+    
     setSaving(false);
     setPopup(null);
   }
@@ -266,6 +468,28 @@ export default function SmtpHealthPage() {
         ))}
       </div>
 
+      {/* Section Tabs - Only for boss and server_manager */}
+      {(user?.role === 'boss' || user?.role === 'server_manager') && (
+        <div className="flex gap-1">
+          <button
+            onClick={() => setSection('production')}
+            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
+              section === 'production' ? 'glass-button' : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            Production ({allSectionServers.production?.length || 0})
+          </button>
+          <button
+            onClick={() => setSection('suspended')}
+            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
+              section === 'suspended' ? 'glass-button' : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            Suspended ({allSectionServers.suspended?.length || 0})
+          </button>
+        </div>
+      )}
+
       {/* Month nav */}
       <div className="flex items-center gap-3">
         <button onClick={() => { if (month === 0) { setMonth(11); setYear(y => y - 1); } else setMonth(m => m - 1); }} className="glass-button rounded-lg p-1.5">
@@ -276,6 +500,36 @@ export default function SmtpHealthPage() {
           <ChevronRight className="w-4 h-4" />
         </button>
       </div>
+
+      {/* SMTP Manager Selector (for boss/server_manager only) */}
+      {(user?.role === 'boss' || user?.role === 'server_manager') && smtpManagers.length > 0 && (
+        <div className="glass-card rounded-xl p-3">
+          <div className="flex items-center gap-3">
+            <Users className="w-4 h-4 text-primary" />
+            <label className="text-sm font-medium text-foreground">View SMTP Manager:</label>
+            <select
+              value={selectedSmtpManager}
+              onChange={(e) => setSelectedSmtpManager(e.target.value)}
+              className="glass-input rounded-lg px-3 py-1.5 text-sm text-foreground outline-none bg-card min-w-[200px]"
+            >
+              <option value="">All Servers</option>
+              {smtpManagers.map(manager => (
+                <option key={manager.id} value={manager.id}>
+                  {manager.name} ({manager.email})
+                </option>
+              ))}
+            </select>
+            {selectedSmtpManager && (
+              <button 
+                onClick={() => setSelectedSmtpManager('')} 
+                className="text-xs text-muted-foreground hover:text-foreground"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Search filter + copy bar */}
       <div className="flex gap-2 items-center">
@@ -456,6 +710,36 @@ export default function SmtpHealthPage() {
           <div className="px-3 py-2 border-b border-border">
             <span className="text-xs font-semibold text-foreground">{contextMenu.serverIds}</span>
           </div>
+          
+          {/* Assign to Manager section (only for boss/server_manager) */}
+          {(user?.role === 'boss' || user?.role === 'server_manager') && (
+            <>
+              <div className="px-3 py-1.5 bg-muted/30 border-b border-border">
+                <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Assign to Manager</span>
+              </div>
+              {smtpManagers.length === 0 ? (
+                <div className="px-3 py-2 text-xs text-muted-foreground">Loading managers...</div>
+              ) : (
+                smtpManagers.map(manager => (
+                  <button
+                    key={manager.id}
+                    onClick={() => {
+                      console.log('Clicked assign to:', manager.name);
+                      assignServerToManager(contextMenu.serverId, contextMenu.serverIds, manager.id);
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-muted/50 transition-colors text-left border-b border-border/50 last:border-b-0"
+                  >
+                    <UserPlus className="w-3.5 h-3.5 text-primary" />
+                    <div className="flex-1">
+                      <div className="text-foreground text-xs font-medium">{manager.name}</div>
+                      <div className="text-muted-foreground text-[10px]">{manager.email}</div>
+                    </div>
+                  </button>
+                ))
+              )}
+            </>
+          )}
+          
           <button
             onClick={() => toggleSblFlag(contextMenu.serverId, contextMenu.serverIds)}
             className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm hover:bg-muted/50 transition-colors text-left"

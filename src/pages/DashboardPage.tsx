@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/lib/auth';
 import { getDrnDays, STATUS_CONFIG } from '@/lib/statusColors';
-import { AlertTriangle, Server, ShieldAlert, ShieldCheck, CheckCircle2, FileWarning, Loader2, TrendingUp, TrendingDown } from 'lucide-react';
+import { AlertTriangle, Server, ShieldAlert, ShieldCheck, CheckCircle2, FileWarning, Loader2, TrendingUp, TrendingDown, Calendar, Users } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area, CartesianGrid, Legend } from 'recharts';
 
 const STATUS_COLORS: Record<string, string> = {
@@ -18,8 +18,16 @@ export default function DashboardPage() {
   const [allStatuses, setAllStatuses] = useState<any[]>([]);
   const [delistings, setDelistings] = useState<any[]>([]);
   const [activities, setActivities] = useState<any[]>([]);
+  
+  // Date filter state
+  const [dateFilter, setDateFilter] = useState(new Date().toISOString().split('T')[0]);
+  
+  // SMTP Manager filter state (for boss/server_manager)
+  const [smtpManagers, setSmtpManagers] = useState<any[]>([]);
+  const [selectedSmtpManager, setSelectedSmtpManager] = useState<string>('');
 
   useEffect(() => {
+    loadSmtpManagers();
     loadData();
     const channels = ['servers', 'smtp_status', 'delistings', 'activity_log'].map(table =>
       supabase.channel(`dashboard-${table}`)
@@ -29,16 +37,72 @@ export default function DashboardPage() {
     return () => { channels.forEach(c => supabase.removeChannel(c)); };
   }, []);
 
+  useEffect(() => {
+    // Reload data when date or SMTP manager filter changes
+    loadData();
+  }, [dateFilter, selectedSmtpManager]);
+
+  async function loadSmtpManagers() {
+    if (user?.role === 'boss' || user?.role === 'server_manager') {
+      const { data } = await supabase
+        .from('users')
+        .select('*')
+        .eq('role', 'smtp_manager')
+        .order('name');
+      setSmtpManagers(data || []);
+    }
+  }
+
   async function loadData() {
     setLoading(true);
-    const today = new Date().toISOString().split('T')[0];
-    const twoWeeksAgo = new Date(Date.now() - 14 * 86400000).toISOString().split('T')[0];
+    const today = dateFilter;
+    const twoWeeksAgo = new Date(new Date(dateFilter).getTime() - 14 * 86400000).toISOString().split('T')[0];
+
+    // Check if user is smtp_manager - filter by their assigned servers
+    const isSmtpManager = user?.role === 'smtp_manager';
+    let assignedServerIds: string[] = [];
+
+    if (isSmtpManager && user?.id) {
+      const { data: assignments } = await supabase
+        .from('server_smtp_assignments')
+        .select('server_id')
+        .eq('smtp_manager_id', user.id);
+      assignedServerIds = assignments?.map(a => a.server_id) || [];
+    } else if ((user?.role === 'boss' || user?.role === 'server_manager') && selectedSmtpManager) {
+      // Boss/server_manager viewing specific SMTP manager's data
+      const { data: assignments } = await supabase
+        .from('server_smtp_assignments')
+        .select('server_id')
+        .eq('smtp_manager_id', selectedSmtpManager);
+      assignedServerIds = assignments?.map(a => a.server_id) || [];
+    }
+
+    // Build servers query
+    let serversQuery = supabase.from('servers').select('*');
+    if (assignedServerIds.length > 0) {
+      serversQuery = serversQuery.in('id', assignedServerIds);
+    }
+
+    // Build statuses queries
+    let todayStatusQuery = supabase.from('smtp_status').select('*').eq('date', today);
+    let allStatusQuery = supabase.from('smtp_status').select('*').gte('date', twoWeeksAgo).lte('date', today);
+    
+    if (assignedServerIds.length > 0) {
+      todayStatusQuery = todayStatusQuery.in('server_id', assignedServerIds);
+      allStatusQuery = allStatusQuery.in('server_id', assignedServerIds);
+    }
+
+    // Build delistings query
+    let delistingsQuery = supabase.from('delistings').select('*');
+    if (assignedServerIds.length > 0) {
+      delistingsQuery = delistingsQuery.in('server_id', assignedServerIds);
+    }
 
     const [sRes, stRes, stAllRes, dRes, aRes] = await Promise.all([
-      supabase.from('servers').select('*'),
-      supabase.from('smtp_status').select('*').eq('date', today),
-      supabase.from('smtp_status').select('*').gte('date', twoWeeksAgo),
-      supabase.from('delistings').select('*'),
+      serversQuery,
+      todayStatusQuery,
+      allStatusQuery,
+      delistingsQuery,
       supabase.from('activity_log').select('*').order('created_at', { ascending: false }).limit(10),
     ]);
 
@@ -108,13 +172,13 @@ export default function DashboardPage() {
     const totalToday = statuses.length;
     const healthPct = totalToday > 0 ? Math.round((todayClean / totalToday) * 100) : 100;
 
-    // Yesterday comparison
-    const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
-    const yesterdayStatuses = allStatuses.filter(s => s.date === yesterday);
-    const yesterdayClean = yesterdayStatuses.filter(s => s.status === 'CLEAN').length;
-    const yesterdayTotal = yesterdayStatuses.length;
-    const yesterdayPct = yesterdayTotal > 0 ? Math.round((yesterdayClean / yesterdayTotal) * 100) : 100;
-    const healthDelta = healthPct - yesterdayPct;
+    // Previous day comparison (day before selected date)
+    const previousDay = new Date(new Date(dateFilter).getTime() - 86400000).toISOString().split('T')[0];
+    const previousDayStatuses = allStatuses.filter(s => s.date === previousDay);
+    const previousDayClean = previousDayStatuses.filter(s => s.status === 'CLEAN').length;
+    const previousDayTotal = previousDayStatuses.length;
+    const previousDayPct = previousDayTotal > 0 ? Math.round((previousDayClean / previousDayTotal) * 100) : 100;
+    const healthDelta = healthPct - previousDayPct;
 
     return {
       production, suspended, expiringSoon,
@@ -144,6 +208,51 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-5 animate-fade-in">
+      {/* Filters */}
+      <div className="glass-card rounded-xl p-3">
+        <div className="flex flex-wrap gap-3 items-center">
+          {/* Date Filter */}
+          <div className="flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-primary" />
+            <label className="text-sm font-medium text-foreground">Date:</label>
+            <input
+              type="date"
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value)}
+              className="glass-input rounded-lg px-3 py-1.5 text-sm text-foreground outline-none"
+            />
+          </div>
+
+          {/* SMTP Manager Filter (for boss/server_manager only) */}
+          {(user?.role === 'boss' || user?.role === 'server_manager') && smtpManagers.length > 0 && (
+            <div className="flex items-center gap-2">
+              <Users className="w-4 h-4 text-primary" />
+              <label className="text-sm font-medium text-foreground">SMTP Manager:</label>
+              <select
+                value={selectedSmtpManager}
+                onChange={(e) => setSelectedSmtpManager(e.target.value)}
+                className="glass-input rounded-lg px-3 py-1.5 text-sm text-foreground outline-none bg-card min-w-[200px]"
+              >
+                <option value="">All Managers</option>
+                {smtpManagers.map(manager => (
+                  <option key={manager.id} value={manager.id}>
+                    {manager.name}
+                  </option>
+                ))}
+              </select>
+              {selectedSmtpManager && (
+                <button
+                  onClick={() => setSelectedSmtpManager('')}
+                  className="text-xs text-muted-foreground hover:text-foreground"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* Alert */}
       {expiringSoon.length > 0 && (
         <div className="rounded-xl p-4 flex items-start gap-3" style={{ background: 'rgba(229,62,62,0.12)', border: '1px solid rgba(229,62,62,0.3)' }}>
@@ -213,16 +322,18 @@ export default function DashboardPage() {
                 </Pie>
                 <Tooltip 
                   contentStyle={{ 
-                    background: 'rgba(26, 29, 39, 0.95)', 
-                    border: '1px solid rgba(79, 142, 247, 0.3)', 
-                    borderRadius: 12, 
-                    fontSize: 12, 
-                    color: '#fff',
-                    backdropFilter: 'blur(10px)',
-                    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)'
-                  }} 
-                  itemStyle={{ color: '#fff' }}
-                  labelStyle={{ color: 'hsl(217, 91%, 64%)', fontWeight: 'bold' }}
+                    background: 'rgba(20, 23, 32, 0.85)',
+                    backdropFilter: 'blur(12px)',
+                    WebkitBackdropFilter: 'blur(12px)',
+                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                    borderRadius: 10,
+                    fontSize: 13,
+                    color: '#ffffff',
+                    fontWeight: 500,
+                    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1)'
+                  }}
+                  itemStyle={{ color: '#ffffff', fontWeight: 600 }}
+                  labelStyle={{ color: '#4f8ef7', fontWeight: 'bold', marginBottom: '4px' }}
                 />
                 <Legend formatter={(value) => <span className="text-xs text-muted-foreground">{STATUS_CONFIG[value]?.label || value}</span>} />
               </PieChart>
@@ -230,28 +341,31 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* Provider Distribution */}
-        <div className="glass-card rounded-xl p-4">
-          <p className="text-xs text-muted-foreground mb-2">Servers by Provider</p>
-          {providerData.length === 0 ? (
-            <p className="text-xs text-muted-foreground text-center mt-8">No servers</p>
-          ) : (
-            <ResponsiveContainer width="100%" height={180}>
-              <BarChart data={providerData} layout="vertical" margin={{ left: 0, right: 10, top: 5, bottom: 5 }}>
+        {/* Provider Distribution - Only for boss and server_manager */}
+        {(user?.role === 'boss' || user?.role === 'server_manager') && (
+          <div className="glass-card rounded-xl p-4">
+            <p className="text-xs text-muted-foreground mb-2">Servers by Provider</p>
+            {providerData.length === 0 ? (
+              <p className="text-xs text-muted-foreground text-center mt-8">No servers</p>
+            ) : (
+              <ResponsiveContainer width="100%" height={180}>
+                <BarChart data={providerData} layout="vertical" margin={{ left: 0, right: 10, top: 5, bottom: 5 }}>
                 <XAxis type="number" hide />
                 <YAxis type="category" dataKey="name" width={70} tick={{ fontSize: 11, fill: 'hsl(215,20%,70%)' }} />
                 <Tooltip 
                   contentStyle={{ 
-                    background: 'rgba(26, 29, 39, 0.95)', 
-                    border: '1px solid rgba(79, 142, 247, 0.3)', 
-                    borderRadius: 12, 
-                    fontSize: 12, 
-                    color: '#fff',
-                    backdropFilter: 'blur(10px)',
-                    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)'
-                  }} 
-                  itemStyle={{ color: '#fff' }}
-                  labelStyle={{ color: 'hsl(217, 91%, 64%)', fontWeight: 'bold' }}
+                    background: 'rgba(20, 23, 32, 0.85)',
+                    backdropFilter: 'blur(12px)',
+                    WebkitBackdropFilter: 'blur(12px)',
+                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                    borderRadius: 10,
+                    fontSize: 13,
+                    color: '#ffffff',
+                    fontWeight: 500,
+                    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1)'
+                  }}
+                  itemStyle={{ color: '#ffffff', fontWeight: 600 }}
+                  labelStyle={{ color: '#4f8ef7', fontWeight: 'bold', marginBottom: '4px' }}
                 />
                 <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={16}>
                   {providerData.map((_, i) => (
@@ -261,7 +375,8 @@ export default function DashboardPage() {
               </BarChart>
             </ResponsiveContainer>
           )}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* SMTP Trend Area Chart */}
@@ -274,16 +389,18 @@ export default function DashboardPage() {
             <YAxis allowDecimals={false} tick={{ fontSize: 10, fill: 'hsl(215,20%,70%)' }} />
             <Tooltip 
               contentStyle={{ 
-                background: 'rgba(26, 29, 39, 0.95)', 
-                border: '1px solid rgba(79, 142, 247, 0.3)', 
-                borderRadius: 12, 
-                fontSize: 12, 
-                color: '#fff',
-                backdropFilter: 'blur(10px)',
-                boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)'
-              }} 
-              itemStyle={{ color: '#fff' }}
-              labelStyle={{ color: 'hsl(217, 91%, 64%)', fontWeight: 'bold' }}
+                background: 'rgba(20, 23, 32, 0.85)',
+                backdropFilter: 'blur(12px)',
+                WebkitBackdropFilter: 'blur(12px)',
+                border: '1px solid rgba(255, 255, 255, 0.15)',
+                borderRadius: 10,
+                fontSize: 13,
+                color: '#ffffff',
+                fontWeight: 500,
+                boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1)'
+              }}
+              itemStyle={{ color: '#ffffff', fontWeight: 600 }}
+              labelStyle={{ color: '#4f8ef7', fontWeight: 'bold', marginBottom: '4px' }}
             />
             <Area type="monotone" dataKey="CLEAN" stackId="1" stroke="#48bb78" fill="#48bb78" fillOpacity={0.4} />
             <Area type="monotone" dataKey="BL" stackId="1" stroke="#e53e3e" fill="#e53e3e" fillOpacity={0.4} />

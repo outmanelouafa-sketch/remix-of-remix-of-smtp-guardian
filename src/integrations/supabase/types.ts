@@ -171,6 +171,45 @@ export type Database = {
         }
         Relationships: []
       }
+      server_smtp_assignments: {
+        Row: {
+          id: string
+          server_id: string
+          smtp_manager_id: string
+          assigned_by: string
+          assigned_at: string
+        }
+        Insert: {
+          id?: string
+          server_id: string
+          smtp_manager_id: string
+          assigned_by: string
+          assigned_at?: string
+        }
+        Update: {
+          id?: string
+          server_id?: string
+          smtp_manager_id?: string
+          assigned_by?: string
+          assigned_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "server_smtp_assignments_server_id_fkey"
+            columns: ["server_id"]
+            isOneToOne: false
+            referencedRelation: "servers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "server_smtp_assignments_smtp_manager_id_fkey"
+            columns: ["smtp_manager_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       smtp_status: {
         Row: {
           date: string
