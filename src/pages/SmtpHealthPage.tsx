@@ -26,6 +26,7 @@ export default function SmtpHealthPage() {
   const [selectEndRow, setSelectEndRow] = useState<number | null>(null);
   const [selectedCells, setSelectedCells] = useState<Set<string>>(new Set());
   const tableRef = useRef<HTMLTableElement>(null);
+  const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     loadData();
@@ -289,9 +290,22 @@ export default function SmtpHealthPage() {
                             clearSelection();
                             return;
                           }
-                          handleCellClick(server.id, d, e);
+                          // Delay single-click to allow double-click to cancel it
+                          if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
+                          const evt = { clientX: e.clientX, clientY: e.clientY };
+                          clickTimerRef.current = setTimeout(() => {
+                            handleCellClick(server.id, d, evt as React.MouseEvent);
+                            clickTimerRef.current = null;
+                          }, 250);
                         }}
-                        onDoubleClick={e => handleCellDoubleClick(rowIdx, d, e)}
+                        onDoubleClick={e => {
+                          // Cancel single-click popup
+                          if (clickTimerRef.current) {
+                            clearTimeout(clickTimerRef.current);
+                            clickTimerRef.current = null;
+                          }
+                          handleCellDoubleClick(rowIdx, d, e);
+                        }}
                         onMouseEnter={() => handleCellMouseEnter(rowIdx, d)}
                         title={entry ? `${entry.status}${entry.note ? ': ' + entry.note : ''} — by ${entry.updated_by}` : 'Click to set status'}
                       >
