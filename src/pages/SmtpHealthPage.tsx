@@ -1,10 +1,10 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
 import { STATUS_CONFIG, getDrnDays, getDrnColor } from '@/lib/statusColors';
 import { toast } from 'sonner';
-import { ChevronLeft, ChevronRight, Loader2, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Loader2, X, Copy } from 'lucide-react';
 
 export default function SmtpHealthPage() {
   const { user } = useAuth();
@@ -18,6 +18,14 @@ export default function SmtpHealthPage() {
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
+
+  // Column selection state
+  const [selecting, setSelecting] = useState(false);
+  const [selectCol, setSelectCol] = useState<number | null>(null);
+  const [selectStartRow, setSelectStartRow] = useState<number | null>(null);
+  const [selectEndRow, setSelectEndRow] = useState<number | null>(null);
+  const [selectedCells, setSelectedCells] = useState<Set<string>>(new Set());
+  const tableRef = useRef<HTMLTableElement>(null);
 
   useEffect(() => {
     loadData();
@@ -44,15 +52,80 @@ export default function SmtpHealthPage() {
   const isToday = (day: number) => today.getFullYear() === year && today.getMonth() === month && today.getDate() === day;
 
   const todayStr = today.toISOString().slice(0, 10);
-  const yesterday = new Date(today);
-  yesterday.setDate(yesterday.getDate() - 1);
-  const yesterdayStr = yesterday.toISOString().slice(0, 10);
+
+  const filteredServers = useMemo(() => {
+    const q = search.toLowerCase();
+    return servers.filter(s => !q || s.ids?.toLowerCase().includes(q) || s.ip_main?.toLowerCase().includes(q));
+  }, [servers, search]);
 
   const statusMap = useMemo(() => {
     const map: Record<string, any> = {};
     statuses.forEach(s => { map[`${s.server_id}_${s.date}`] = s; });
     return map;
   }, [statuses]);
+
+  // Column selection handlers
+  function handleCellDoubleClick(rowIdx: number, colDay: number, e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setSelecting(true);
+    setSelectCol(colDay);
+    setSelectStartRow(rowIdx);
+    setSelectEndRow(rowIdx);
+    setSelectedCells(new Set([`${rowIdx}_${colDay}`]));
+  }
+
+  function handleCellMouseEnter(rowIdx: number, colDay: number) {
+    if (!selecting || colDay !== selectCol) return;
+    setSelectEndRow(rowIdx);
+    const start = Math.min(selectStartRow!, rowIdx);
+    const end = Math.max(selectStartRow!, rowIdx);
+    const cells = new Set<string>();
+    for (let r = start; r <= end; r++) {
+      cells.add(`${r}_${colDay}`);
+    }
+    setSelectedCells(cells);
+  }
+
+  const handleMouseUp = useCallback(() => {
+    if (selecting) {
+      setSelecting(false);
+    }
+  }, [selecting]);
+
+  useEffect(() => {
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => window.removeEventListener('mouseup', handleMouseUp);
+  }, [handleMouseUp]);
+
+  function copySelectedCells() {
+    if (selectedCells.size === 0 || selectCol === null) return;
+    const start = Math.min(selectStartRow!, selectEndRow!);
+    const end = Math.max(selectStartRow!, selectEndRow!);
+    const lines: string[] = [];
+    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(selectCol).padStart(2, '0')}`;
+
+    for (let r = start; r <= end; r++) {
+      const server = filteredServers[r];
+      if (!server) continue;
+      const entry = statusMap[`${server.id}_${dateStr}`];
+      lines.push(entry ? `${server.ids}\t${entry.status}${entry.note ? '\t' + entry.note : ''}` : server.ids);
+    }
+    navigator.clipboard.writeText(lines.join('\n'));
+    toast.success(`Copied ${lines.length} rows`);
+    setSelectedCells(new Set());
+    setSelectCol(null);
+    setSelectStartRow(null);
+    setSelectEndRow(null);
+  }
+
+  function clearSelection() {
+    setSelectedCells(new Set());
+    setSelectCol(null);
+    setSelectStartRow(null);
+    setSelectEndRow(null);
+    setSelecting(false);
+  }
 
   function handleCellClick(serverId: string, day: number, e: React.MouseEvent) {
     const date = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
@@ -82,7 +155,6 @@ export default function SmtpHealthPage() {
         return;
       }
       
-      // Update local state directly
       setStatuses(prev => prev.map(s => s.id === existing.id ? {
         ...s,
         status: selectedStatus,
@@ -105,7 +177,6 @@ export default function SmtpHealthPage() {
         return;
       }
       
-      // Add to local state directly
       setStatuses(prev => [...prev, data]);
     }
 
@@ -143,17 +214,35 @@ export default function SmtpHealthPage() {
         </button>
       </div>
 
-      {/* Search filter */}
-      <div className="flex gap-2">
+      {/* Search filter + copy bar */}
+      <div className="flex gap-2 items-center">
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by IDs or IP..." className="glass-input rounded-lg px-3 py-1.5 text-sm text-foreground outline-none w-52" />
         {search && <button onClick={() => setSearch('')} className="text-xs text-muted-foreground hover:text-foreground px-2">Clear</button>}
-        <span className="text-xs text-muted-foreground self-center ml-auto">{servers.filter(s => { const q = search.toLowerCase(); return !q || s.ids?.toLowerCase().includes(q) || s.ip_main?.toLowerCase().includes(q); }).length} servers</span>
+        
+        {selectedCells.size > 0 && (
+          <div className="flex items-center gap-2 ml-2 px-3 py-1 rounded-lg bg-primary/10 border border-primary/20">
+            <span className="text-xs text-primary font-medium">{selectedCells.size} selected</span>
+            <button onClick={copySelectedCells} className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 font-semibold">
+              <Copy className="w-3 h-3" /> Copy
+            </button>
+            <button onClick={clearSelection} className="text-xs text-muted-foreground hover:text-foreground">
+              <X className="w-3 h-3" />
+            </button>
+          </div>
+        )}
+
+        <span className="text-xs text-muted-foreground self-center ml-auto">{filteredServers.length} servers</span>
       </div>
+
+      {/* Tip */}
+      {selectedCells.size === 0 && (
+        <p className="text-[10px] text-muted-foreground/60">💡 Double-click a cell then drag down to select a column range and copy</p>
+      )}
 
       {/* Grid */}
       <div className="glass-card rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-[11px]">
+          <table ref={tableRef} className="w-full border-collapse text-[11px] select-none">
             <thead>
               <tr>
                 <th className="sticky left-0 z-10 bg-card px-1.5 py-1.5 text-left text-[10px] text-muted-foreground uppercase font-semibold border-r border-border w-[70px] min-w-[70px]">IDS</th>
@@ -173,10 +262,9 @@ export default function SmtpHealthPage() {
               </tr>
             </thead>
             <tbody>
-              {servers.filter(s => { const q = search.toLowerCase(); return !q || s.ids?.toLowerCase().includes(q) || s.ip_main?.toLowerCase().includes(q); }).map(server => (
+              {filteredServers.map((server, rowIdx) => (
                 <tr key={server.id} className={`hover:bg-secondary/20 h-9 ${
-                  server.created_at?.slice(0, 10) === todayStr ? 'bg-primary/15' :
-                  server.created_at?.slice(0, 10) === yesterdayStr ? 'bg-primary/7' : ''
+                  server.created_at?.slice(0, 10) === todayStr ? 'bg-primary/15' : ''
                 }`}>
                   <td className="sticky left-0 z-10 bg-card px-1.5 py-0.5 text-[11px] font-mono font-medium text-primary border-r border-border border-t">{server.ids}</td>
                   <td className="sticky left-[70px] z-10 bg-card px-1.5 py-0.5 text-[11px] font-mono text-muted-foreground border-r border-border border-t">{server.ip_main}</td>
@@ -188,12 +276,23 @@ export default function SmtpHealthPage() {
                   {days.map(d => {
                     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
                     const entry = statusMap[`${server.id}_${dateStr}`];
+                    const isSelected = selectedCells.has(`${rowIdx}_${d}`);
                     return (
                       <td
                         key={d}
-                        className="px-0 py-0 border-t border-border cursor-pointer hover:bg-muted/30 transition-colors w-[64px] min-w-[64px] max-w-[64px] h-9"
+                        className={`px-0 py-0 border-t border-border cursor-pointer hover:bg-muted/30 transition-colors w-[64px] min-w-[64px] max-w-[64px] h-9 ${
+                          isSelected ? 'ring-2 ring-inset ring-primary bg-primary/10' : ''
+                        }`}
                         style={isToday(d) ? { borderLeft: '2px solid hsl(217 91% 64%)', borderRight: '2px solid hsl(217 91% 64%)' } : undefined}
-                        onClick={e => handleCellClick(server.id, d, e)}
+                        onClick={e => {
+                          if (selectedCells.size > 0) {
+                            clearSelection();
+                            return;
+                          }
+                          handleCellClick(server.id, d, e);
+                        }}
+                        onDoubleClick={e => handleCellDoubleClick(rowIdx, d, e)}
+                        onMouseEnter={() => handleCellMouseEnter(rowIdx, d)}
                         title={entry ? `${entry.status}${entry.note ? ': ' + entry.note : ''} — by ${entry.updated_by}` : 'Click to set status'}
                       >
                         {entry && (
@@ -202,7 +301,6 @@ export default function SmtpHealthPage() {
                             style={{ color: STATUS_CONFIG[entry.status]?.color, background: STATUS_CONFIG[entry.status]?.bg }}
                           >
                             {entry.status}
-                            {/* Tooltip on hover */}
                             <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block z-50 min-w-[120px] p-2 rounded-lg text-xs text-foreground shadow-lg border border-border bg-card whitespace-nowrap">
                               <div className="font-semibold">{STATUS_CONFIG[entry.status]?.label}</div>
                               {entry.note && <div className="text-muted-foreground mt-0.5">{entry.note}</div>}
