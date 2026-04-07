@@ -156,6 +156,40 @@ export default function SmtpHealthPage() {
     setSelecting(false);
   }
 
+  // Close context menu on click anywhere
+  useEffect(() => {
+    if (!contextMenu) return;
+    const close = () => setContextMenu(null);
+    window.addEventListener('click', close);
+    return () => window.removeEventListener('click', close);
+  }, [contextMenu]);
+
+  function handleContextMenu(server: any, e: React.MouseEvent) {
+    e.preventDefault();
+    setContextMenu({ serverId: server.id, serverIds: server.ids, x: e.clientX, y: e.clientY });
+  }
+
+  async function toggleSblFlag(serverId: string, serverIds: string) {
+    const existing = serverFlags[serverId];
+    if (existing) {
+      await supabase.from('server_flags').delete().eq('id', existing.id);
+      setServerFlags(prev => { const n = { ...prev }; delete n[serverId]; return n; });
+      await logActivity(user!.name, 'remove_flag', serverIds, 'Removed SBL flag');
+      toast.success('SBL flag removed');
+    } else {
+      const { data, error } = await supabase.from('server_flags').insert({
+        server_id: serverId,
+        flag_type: 'SBL',
+        flagged_by: user!.name,
+      }).select().single();
+      if (error) { toast.error('Failed to flag server'); return; }
+      setServerFlags(prev => ({ ...prev, [serverId]: data }));
+      await logActivity(user!.name, 'add_flag', serverIds, 'Marked as Spamhaus SBL');
+      toast.success('Marked as Spamhaus SBL');
+    }
+    setContextMenu(null);
+  }
+
   function handleCellClick(serverId: string, day: number, e: React.MouseEvent) {
     const date = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
     const existing = statusMap[`${serverId}_${date}`];
