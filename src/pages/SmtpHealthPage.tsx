@@ -452,7 +452,43 @@ export default function SmtpHealthPage() {
     setPopup(null);
   }
 
-  const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  async function handleDeleteStatus() {
+    if (!popup) return;
+    const existing = statusMap[`${popup.serverId}_${popup.date}`];
+    if (!existing) return;
+    setSaving(true);
+    const { error } = await supabase.from('smtp_status').delete().eq('id', existing.id);
+    if (error) { toast.error('Failed to delete status'); setSaving(false); return; }
+    setStatuses(prev => prev.filter(s => s.id !== existing.id));
+    const srv = servers.find(s => s.id === popup.serverId);
+    await logActivity(user!.name, 'delete_smtp_status', srv?.ids, `Cleared status for ${popup.date}`);
+    toast.success('Status cleared');
+    setSaving(false);
+    setPopup(null);
+  }
+
+  async function handleDeleteSelectedStatuses() {
+    if (selectedCells.size === 0 || selectCol === null) return;
+    const start = Math.min(selectStartRow!, selectEndRow!);
+    const end = Math.max(selectStartRow!, selectEndRow!);
+    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(selectCol).padStart(2, '0')}`;
+    const toDelete: { id: string; serverId: string }[] = [];
+    for (let r = start; r <= end; r++) {
+      const server = filteredServers[r];
+      if (!server) continue;
+      const entry = statusMap[`${server.id}_${dateStr}`];
+      if (entry) toDelete.push({ id: entry.id, serverId: server.id });
+    }
+    if (toDelete.length === 0) { toast('No statuses to clear'); return; }
+    const ids = toDelete.map(d => d.id);
+    const { error } = await supabase.from('smtp_status').delete().in('id', ids);
+    if (error) { toast.error('Failed to delete statuses'); return; }
+    setStatuses(prev => prev.filter(s => !ids.includes(s.id)));
+    await logActivity(user!.name, 'bulk_delete_smtp_status', `${toDelete.length} servers`, `Cleared statuses for ${dateStr}`);
+    toast.success(`Cleared ${toDelete.length} statuses`);
+    clearSelection();
+  }
+
 
   if (loading) return <div className="flex items-center justify-center h-64"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>;
 
