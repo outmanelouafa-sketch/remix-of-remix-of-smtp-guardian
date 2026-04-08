@@ -328,6 +328,37 @@ export default function ServersPage() {
     setAssignments(data || []);
   }
 
+  async function loadProviderUrls() {
+    const { data } = await supabase.from('provider_urls').select('*');
+    const map: Record<string, string> = {};
+    (data || []).forEach((row: any) => { map[row.provider_name.toLowerCase()] = row.url; });
+    setProviderUrls(map);
+  }
+
+  async function saveProviderUrl(providerName: string, url: string) {
+    if (!providerName || !url) return;
+    const key = providerName.toLowerCase();
+    // Upsert
+    const { error } = await supabase.from('provider_urls').upsert(
+      { provider_name: key, url, added_by: user?.name || '' },
+      { onConflict: 'provider_name' }
+    );
+    if (error) { toast.error('Failed to save URL'); return; }
+    setProviderUrls(prev => ({ ...prev, [key]: url }));
+    toast.success(`URL saved for ${providerName}`);
+    setProviderUrlMenu(null);
+    setShowProviderUrlInput(false);
+  }
+
+  function handleProviderContextMenu(e: React.MouseEvent, provider: string) {
+    e.preventDefault();
+    if (!provider) return;
+    const existing = providerUrls[provider.toLowerCase()] || '';
+    setProviderUrlDraft(existing);
+    setProviderUrlMenu({ provider, x: e.clientX, y: e.clientY });
+    setShowProviderUrlInput(false);
+  }
+
   async function handleAssignServers() {
     if (!selectedManager) {
       toast.error('Please select an SMTP manager');
