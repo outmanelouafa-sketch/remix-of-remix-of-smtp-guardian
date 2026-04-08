@@ -298,13 +298,18 @@ export default function ServersPage() {
     return () => { supabase.removeChannel(channel); };
   }, []);
 
-  // Close single assign popup on click outside
+  // Close single assign popup and provider URL menu on click outside
   useEffect(() => {
-    if (!singleAssignPopup) return;
-    const close = () => setSingleAssignPopup(null);
+    if (!singleAssignPopup && !providerUrlMenu) return;
+    const close = () => { setSingleAssignPopup(null); setProviderUrlMenu(null); setShowProviderUrlInput(false); };
     window.addEventListener('click', close);
     return () => window.removeEventListener('click', close);
-  }, [singleAssignPopup]);
+  }, [singleAssignPopup, providerUrlMenu]);
+
+  // Focus provider URL input when shown
+  useEffect(() => {
+    if (showProviderUrlInput) setTimeout(() => providerUrlInputRef.current?.focus(), 50);
+  }, [showProviderUrlInput]);
 
   async function loadSmtpManagers() {
     const { data } = await supabase
