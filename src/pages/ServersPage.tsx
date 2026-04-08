@@ -4,7 +4,7 @@ import { useAuth } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
 import { getDrnDays, getDrnColor } from '@/lib/statusColors';
 import { toast } from 'sonner';
-import { Plus, Trash2, PauseCircle, RotateCcw, Loader2, X, Check, AlertTriangle, Bell, Users } from 'lucide-react';
+import { Plus, Trash2, PauseCircle, RotateCcw, Loader2, X, Check, AlertTriangle, Bell, Users, ExternalLink, Link2 } from 'lucide-react';
 
 interface ServerRow {
   id: string; ids: string; ip_main: string; domain: string; provider: string; rdns: string;
