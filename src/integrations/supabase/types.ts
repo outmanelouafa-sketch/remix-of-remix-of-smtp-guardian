@@ -82,6 +82,33 @@ export type Database = {
           },
         ]
       }
+      provider_urls: {
+        Row: {
+          added_by: string | null
+          created_at: string
+          id: string
+          provider_name: string
+          updated_at: string
+          url: string
+        }
+        Insert: {
+          added_by?: string | null
+          created_at?: string
+          id?: string
+          provider_name: string
+          updated_at?: string
+          url: string
+        }
+        Update: {
+          added_by?: string | null
+          created_at?: string
+          id?: string
+          provider_name?: string
+          updated_at?: string
+          url?: string
+        }
+        Relationships: []
+      }
       server_flags: {
         Row: {
           created_at: string
