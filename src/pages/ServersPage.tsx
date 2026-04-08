@@ -4,7 +4,7 @@ import { useAuth } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
 import { getDrnDays, getDrnColor } from '@/lib/statusColors';
 import { toast } from 'sonner';
-import { Plus, Trash2, PauseCircle, RotateCcw, Loader2, X, Check, AlertTriangle, Bell, Users } from 'lucide-react';
+import { Plus, Trash2, PauseCircle, RotateCcw, Loader2, X, Check, AlertTriangle, Bell, Users, ExternalLink, Link2 } from 'lucide-react';
 
 interface ServerRow {
   id: string; ids: string; ip_main: string; domain: string; provider: string; rdns: string;
@@ -273,11 +273,19 @@ export default function ServersPage() {
   // Single server assignment popup
   const [singleAssignPopup, setSingleAssignPopup] = useState<{ serverId: string; serverIds: string; x: number; y: number } | null>(null);
 
+  // Provider URL state
+  const [providerUrls, setProviderUrls] = useState<Record<string, string>>({});
+  const [providerUrlMenu, setProviderUrlMenu] = useState<{ provider: string; x: number; y: number } | null>(null);
+  const [providerUrlDraft, setProviderUrlDraft] = useState('');
+  const [showProviderUrlInput, setShowProviderUrlInput] = useState(false);
+  const providerUrlInputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     loadServers();
     loadServerAlerts();
     loadSmtpManagers();
     loadAssignments();
+    loadProviderUrls();
     // Subscribe to new alerts
     const channel = supabase.channel('server-alerts')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'activity_log', filter: 'action_type=eq.server_alert' }, 
@@ -290,13 +298,18 @@ export default function ServersPage() {
     return () => { supabase.removeChannel(channel); };
   }, []);
 
-  // Close single assign popup on click outside
+  // Close single assign popup and provider URL menu on click outside
   useEffect(() => {
-    if (!singleAssignPopup) return;
-    const close = () => setSingleAssignPopup(null);
+    if (!singleAssignPopup && !providerUrlMenu) return;
+    const close = () => { setSingleAssignPopup(null); setProviderUrlMenu(null); setShowProviderUrlInput(false); };
     window.addEventListener('click', close);
     return () => window.removeEventListener('click', close);
-  }, [singleAssignPopup]);
+  }, [singleAssignPopup, providerUrlMenu]);
+
+  // Focus provider URL input when shown
+  useEffect(() => {
+    if (showProviderUrlInput) setTimeout(() => providerUrlInputRef.current?.focus(), 50);
+  }, [showProviderUrlInput]);
 
   async function loadSmtpManagers() {
     const { data } = await supabase
@@ -313,6 +326,37 @@ export default function ServersPage() {
       .select('*, users(name)')
       .order('assigned_at', { ascending: false });
     setAssignments(data || []);
+  }
+
+  async function loadProviderUrls() {
+    const { data } = await supabase.from('provider_urls').select('*');
+    const map: Record<string, string> = {};
+    (data || []).forEach((row: any) => { map[row.provider_name.toLowerCase()] = row.url; });
+    setProviderUrls(map);
+  }
+
+  async function saveProviderUrl(providerName: string, url: string) {
+    if (!providerName || !url) return;
+    const key = providerName.toLowerCase();
+    // Upsert
+    const { error } = await supabase.from('provider_urls').upsert(
+      { provider_name: key, url, added_by: user?.name || '' },
+      { onConflict: 'provider_name' }
+    );
+    if (error) { toast.error('Failed to save URL'); return; }
+    setProviderUrls(prev => ({ ...prev, [key]: url }));
+    toast.success(`URL saved for ${providerName}`);
+    setProviderUrlMenu(null);
+    setShowProviderUrlInput(false);
+  }
+
+  function handleProviderContextMenu(e: React.MouseEvent, provider: string) {
+    e.preventDefault();
+    if (!provider) return;
+    const existing = providerUrls[provider.toLowerCase()] || '';
+    setProviderUrlDraft(existing);
+    setProviderUrlMenu({ provider, x: e.clientX, y: e.clientY });
+    setShowProviderUrlInput(false);
   }
 
   async function handleAssignServers() {
@@ -668,15 +712,51 @@ export default function ServersPage() {
                       </td>
                     )}
                     {EDITABLE_COLUMNS.map(col => (
-                      <td key={col.key} className={`border-r border-border ${col.key === 'ids' ? 'font-mono font-medium text-primary' : ''} ${col.key === 'ip_main' ? 'font-mono' : ''}`}>
-                        <InlineCell
-                          value={s[col.key] || ''}
-                          type={col.type}
-                          onSave={(v) => handleInlineSave(s, col.key, v)}
-                          highlightQuery={search}
-                          fieldKey={col.key}
-                          existingValues={col.key === 'provider' ? providers : col.key === 'email' ? emails : undefined}
-                        />
+                      <td
+                        key={col.key}
+                        className={`border-r border-border ${col.key === 'ids' ? 'font-mono font-medium text-primary' : ''} ${col.key === 'ip_main' ? 'font-mono' : ''}`}
+                        onContextMenu={col.key === 'provider' ? (e) => handleProviderContextMenu(e, s.provider || '') : undefined}
+                      >
+                        {col.key === 'provider' ? (
+                          <div className="relative group">
+                            <InlineCell
+                              value={s[col.key] || ''}
+                              type={col.type}
+                              onSave={(v) => {
+                                handleInlineSave(s, col.key, v);
+                                // Auto-assign URL if provider has one stored
+                                // (no action needed, URL is linked by provider name)
+                              }}
+                              highlightQuery={search}
+                              fieldKey={col.key}
+                              existingValues={providers}
+                            />
+                            {s.provider && providerUrls[s.provider.toLowerCase()] && (
+                              <div className="absolute bottom-full left-0 mb-1 hidden group-hover:flex z-50 items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs shadow-lg border border-border bg-card text-foreground whitespace-nowrap">
+                                <Link2 className="w-3 h-3 text-primary" />
+                                <a
+                                  href={providerUrls[s.provider.toLowerCase()]}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-primary hover:underline font-medium truncate max-w-[200px]"
+                                  onClick={e => e.stopPropagation()}
+                                >
+                                  {providerUrls[s.provider.toLowerCase()]}
+                                </a>
+                                <ExternalLink className="w-3 h-3 text-muted-foreground" />
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <InlineCell
+                            value={s[col.key] || ''}
+                            type={col.type}
+                            onSave={(v) => handleInlineSave(s, col.key, v)}
+                            highlightQuery={search}
+                            fieldKey={col.key}
+                            existingValues={col.key === 'email' ? emails : undefined}
+                          />
+                        )}
                       </td>
                     ))}
                     <td className="border-r border-border">
@@ -883,6 +963,81 @@ export default function ServersPage() {
                 </div>
               </button>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Provider URL Context Menu */}
+      {providerUrlMenu && (
+        <div
+          className="fixed z-[100] min-w-[280px] rounded-xl border border-border bg-card shadow-2xl animate-fade-in overflow-hidden"
+          style={{ left: providerUrlMenu.x, top: providerUrlMenu.y }}
+          onClick={e => e.stopPropagation()}
+        >
+          <div className="px-3 py-2 border-b border-border bg-muted/30 flex items-center gap-2">
+            <Link2 className="w-3.5 h-3.5 text-primary" />
+            <span className="text-xs font-semibold text-foreground">{providerUrlMenu.provider}</span>
+          </div>
+          <div className="p-2 space-y-2">
+            {providerUrls[providerUrlMenu.provider.toLowerCase()] && !showProviderUrlInput ? (
+              <>
+                <a
+                  href={providerUrls[providerUrlMenu.provider.toLowerCase()]}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 w-full px-3 py-2 text-sm rounded-lg hover:bg-primary/10 transition-colors text-primary"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  Visit Website
+                </a>
+                <button
+                  onClick={() => { setShowProviderUrlInput(true); setProviderUrlDraft(providerUrls[providerUrlMenu.provider.toLowerCase()]); }}
+                  className="flex items-center gap-2 w-full px-3 py-2 text-sm rounded-lg hover:bg-muted/50 transition-colors text-foreground"
+                >
+                  <Link2 className="w-3.5 h-3.5 text-muted-foreground" />
+                  Edit URL
+                </button>
+                <button
+                  onClick={async () => {
+                    const key = providerUrlMenu.provider.toLowerCase();
+                    await supabase.from('provider_urls').delete().eq('provider_name', key);
+                    setProviderUrls(prev => { const n = { ...prev }; delete n[key]; return n; });
+                    toast.success('URL removed');
+                    setProviderUrlMenu(null);
+                  }}
+                  className="flex items-center gap-2 w-full px-3 py-2 text-sm rounded-lg hover:bg-destructive/10 transition-colors text-destructive"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Remove URL
+                </button>
+              </>
+            ) : (
+              <div className="space-y-2">
+                <input
+                  ref={providerUrlInputRef}
+                  value={providerUrlDraft}
+                  onChange={e => setProviderUrlDraft(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') saveProviderUrl(providerUrlMenu.provider, providerUrlDraft); if (e.key === 'Escape') setProviderUrlMenu(null); }}
+                  placeholder="https://provider-website.com"
+                  className="w-full bg-primary/10 border border-primary/30 rounded-lg px-3 py-2 text-xs outline-none text-foreground"
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => saveProviderUrl(providerUrlMenu.provider, providerUrlDraft)}
+                    disabled={!providerUrlDraft}
+                    className="flex-1 px-3 py-1.5 text-xs font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 flex items-center justify-center gap-1"
+                  >
+                    <Check className="w-3 h-3" /> Save
+                  </button>
+                  <button
+                    onClick={() => setProviderUrlMenu(null)}
+                    className="px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground rounded-lg"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

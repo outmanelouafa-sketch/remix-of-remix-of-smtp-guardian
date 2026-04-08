@@ -82,6 +82,33 @@ export type Database = {
           },
         ]
       }
+      provider_urls: {
+        Row: {
+          added_by: string | null
+          created_at: string
+          id: string
+          provider_name: string
+          updated_at: string
+          url: string
+        }
+        Insert: {
+          added_by?: string | null
+          created_at?: string
+          id?: string
+          provider_name: string
+          updated_at?: string
+          url: string
+        }
+        Update: {
+          added_by?: string | null
+          created_at?: string
+          id?: string
+          provider_name?: string
+          updated_at?: string
+          url?: string
+        }
+        Relationships: []
+      }
       server_flags: {
         Row: {
           created_at: string
@@ -110,6 +137,45 @@ export type Database = {
             columns: ["server_id"]
             isOneToOne: false
             referencedRelation: "servers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      server_smtp_assignments: {
+        Row: {
+          assigned_at: string
+          assigned_by: string
+          id: string
+          server_id: string
+          smtp_manager_id: string
+        }
+        Insert: {
+          assigned_at?: string
+          assigned_by: string
+          id?: string
+          server_id: string
+          smtp_manager_id: string
+        }
+        Update: {
+          assigned_at?: string
+          assigned_by?: string
+          id?: string
+          server_id?: string
+          smtp_manager_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "server_smtp_assignments_server_id_fkey"
+            columns: ["server_id"]
+            isOneToOne: false
+            referencedRelation: "servers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "server_smtp_assignments_smtp_manager_id_fkey"
+            columns: ["smtp_manager_id"]
+            isOneToOne: false
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
         ]
@@ -170,45 +236,6 @@ export type Database = {
           section?: string
         }
         Relationships: []
-      }
-      server_smtp_assignments: {
-        Row: {
-          id: string
-          server_id: string
-          smtp_manager_id: string
-          assigned_by: string
-          assigned_at: string
-        }
-        Insert: {
-          id?: string
-          server_id: string
-          smtp_manager_id: string
-          assigned_by: string
-          assigned_at?: string
-        }
-        Update: {
-          id?: string
-          server_id?: string
-          smtp_manager_id?: string
-          assigned_by?: string
-          assigned_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "server_smtp_assignments_server_id_fkey"
-            columns: ["server_id"]
-            isOneToOne: false
-            referencedRelation: "servers"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "server_smtp_assignments_smtp_manager_id_fkey"
-            columns: ["smtp_manager_id"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-        ]
       }
       smtp_status: {
         Row: {

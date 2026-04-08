@@ -4,7 +4,7 @@ import { useAuth } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
 import { STATUS_CONFIG, getDrnDays, getDrnColor } from '@/lib/statusColors';
 import { toast } from 'sonner';
-import { ChevronLeft, ChevronRight, Loader2, X, Copy, Shield, Users, UserPlus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Loader2, X, Copy, Shield, Users, UserPlus, Trash2 } from 'lucide-react';
 
 interface ContextMenu {
   serverId: string;
@@ -193,6 +193,8 @@ export default function SmtpHealthPage() {
   function handleCellDoubleClick(rowIdx: number, colDay: number, e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
+    if (clickTimerRef.current) { clearTimeout(clickTimerRef.current); clickTimerRef.current = null; }
+    setPopup(null);
     setSelecting(true);
     setSelectCol(colDay);
     setSelectStartRow(rowIdx);
@@ -452,9 +454,45 @@ export default function SmtpHealthPage() {
     setPopup(null);
   }
 
-  const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  async function handleDeleteStatus() {
+    if (!popup) return;
+    const existing = statusMap[`${popup.serverId}_${popup.date}`];
+    if (!existing) return;
+    setSaving(true);
+    const { error } = await supabase.from('smtp_status').delete().eq('id', existing.id);
+    if (error) { toast.error('Failed to delete status'); setSaving(false); return; }
+    setStatuses(prev => prev.filter(s => s.id !== existing.id));
+    const srv = servers.find(s => s.id === popup.serverId);
+    await logActivity(user!.name, 'delete_smtp_status', srv?.ids, `Cleared status for ${popup.date}`);
+    toast.success('Status cleared');
+    setSaving(false);
+    setPopup(null);
+  }
 
-  if (loading) return <div className="flex items-center justify-center h-64"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>;
+  async function handleDeleteSelectedStatuses() {
+    if (selectedCells.size === 0 || selectCol === null) return;
+    const start = Math.min(selectStartRow!, selectEndRow!);
+    const end = Math.max(selectStartRow!, selectEndRow!);
+    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(selectCol).padStart(2, '0')}`;
+    const toDelete: { id: string; serverId: string }[] = [];
+    for (let r = start; r <= end; r++) {
+      const server = filteredServers[r];
+      if (!server) continue;
+      const entry = statusMap[`${server.id}_${dateStr}`];
+      if (entry) toDelete.push({ id: entry.id, serverId: server.id });
+    }
+    if (toDelete.length === 0) { toast('No statuses to clear'); return; }
+    const ids = toDelete.map(d => d.id);
+    const { error } = await supabase.from('smtp_status').delete().in('id', ids);
+    if (error) { toast.error('Failed to delete statuses'); return; }
+    setStatuses(prev => prev.filter(s => !ids.includes(s.id)));
+    await logActivity(user!.name, 'bulk_delete_smtp_status', `${toDelete.length} servers`, `Cleared statuses for ${dateStr}`);
+    toast.success(`Cleared ${toDelete.length} statuses`);
+    clearSelection();
+  }
+
+
+  const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
   return (
     <div className="space-y-4 animate-fade-in">
@@ -542,6 +580,9 @@ export default function SmtpHealthPage() {
             <button onClick={copySelectedCells} className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 font-semibold">
               <Copy className="w-3 h-3" /> Copy
             </button>
+            <button onClick={handleDeleteSelectedStatuses} className="flex items-center gap-1 text-xs text-destructive hover:text-destructive/80 font-semibold">
+              <Trash2 className="w-3 h-3" /> Clear
+            </button>
             <button onClick={clearSelection} className="text-xs text-muted-foreground hover:text-foreground">
               <X className="w-3 h-3" />
             </button>
@@ -610,15 +651,17 @@ export default function SmtpHealthPage() {
                         }`}
                         style={isToday(d) ? { borderLeft: '2px solid hsl(217 91% 64%)', borderRight: '2px solid hsl(217 91% 64%)' } : undefined}
                         onClick={e => {
+                          if (selecting) return;
                           if (selectedCells.size > 0) {
                             clearSelection();
                             return;
                           }
-                          // Delay single-click to allow double-click to cancel it
                           if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
                           const evt = { clientX: e.clientX, clientY: e.clientY };
                           clickTimerRef.current = setTimeout(() => {
-                            handleCellClick(server.id, d, evt as React.MouseEvent);
+                            if (!selecting) {
+                              handleCellClick(server.id, d, evt as React.MouseEvent);
+                            }
                             clickTimerRef.current = null;
                           }, 250);
                         }}
@@ -688,14 +731,26 @@ export default function SmtpHealthPage() {
               placeholder="Note (optional)"
               className="w-full glass-input rounded-lg px-3 py-2 text-sm text-foreground outline-none mb-3"
             />
-            <button
-              onClick={handleSaveStatus}
-              disabled={!selectedStatus || saving}
-              className="w-full glass-button rounded-lg py-2 text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2"
-            >
-              {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-              Save
-            </button>
+            <div className="flex gap-2">
+              {statusMap[`${popup.serverId}_${popup.date}`] && (
+                <button
+                  onClick={handleDeleteStatus}
+                  disabled={saving}
+                  className="flex-1 rounded-lg py-2 text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2 border border-destructive/30 text-destructive hover:bg-destructive/10 transition-colors"
+                >
+                  {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+                  <Trash2 className="w-3.5 h-3.5" /> Clear
+                </button>
+              )}
+              <button
+                onClick={handleSaveStatus}
+                disabled={!selectedStatus || saving}
+                className="flex-1 glass-button rounded-lg py-2 text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+                Save
+              </button>
+            </div>
           </div>
         </div>
       )}
