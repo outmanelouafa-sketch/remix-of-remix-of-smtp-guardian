@@ -273,11 +273,19 @@ export default function ServersPage() {
   // Single server assignment popup
   const [singleAssignPopup, setSingleAssignPopup] = useState<{ serverId: string; serverIds: string; x: number; y: number } | null>(null);
 
+  // Provider URL state
+  const [providerUrls, setProviderUrls] = useState<Record<string, string>>({});
+  const [providerUrlMenu, setProviderUrlMenu] = useState<{ provider: string; x: number; y: number } | null>(null);
+  const [providerUrlDraft, setProviderUrlDraft] = useState('');
+  const [showProviderUrlInput, setShowProviderUrlInput] = useState(false);
+  const providerUrlInputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     loadServers();
     loadServerAlerts();
     loadSmtpManagers();
     loadAssignments();
+    loadProviderUrls();
     // Subscribe to new alerts
     const channel = supabase.channel('server-alerts')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'activity_log', filter: 'action_type=eq.server_alert' }, 
