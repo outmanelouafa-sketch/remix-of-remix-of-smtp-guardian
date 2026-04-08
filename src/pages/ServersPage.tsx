@@ -732,8 +732,12 @@ export default function ServersPage() {
                               existingValues={providers}
                             />
                             {s.provider && providerUrls[s.provider.toLowerCase()] && (
-                              <div className="absolute bottom-full left-0 mb-1 hidden group-hover:flex z-50 items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs shadow-lg border border-border bg-card text-foreground whitespace-nowrap">
-                                <Link2 className="w-3 h-3 text-primary" />
+                              <div 
+                                className="absolute bottom-full left-0 mb-1 hidden group-hover:flex group-hover:delay-150 z-50 items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs shadow-lg border border-border bg-card text-foreground whitespace-nowrap"
+                                onMouseEnter={e => e.stopPropagation()}
+                                onMouseLeave={e => e.stopPropagation()}
+                              >
+                                <Link2 className="w-3 h-3 text-primary shrink-0" />
                                 <a
                                   href={providerUrls[s.provider.toLowerCase()]}
                                   target="_blank"
@@ -743,7 +747,7 @@ export default function ServersPage() {
                                 >
                                   {providerUrls[s.provider.toLowerCase()]}
                                 </a>
-                                <ExternalLink className="w-3 h-3 text-muted-foreground" />
+                                <ExternalLink className="w-3 h-3 text-muted-foreground shrink-0" />
                               </div>
                             )}
                           </div>
