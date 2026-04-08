@@ -715,15 +715,51 @@ export default function ServersPage() {
                       </td>
                     )}
                     {EDITABLE_COLUMNS.map(col => (
-                      <td key={col.key} className={`border-r border-border ${col.key === 'ids' ? 'font-mono font-medium text-primary' : ''} ${col.key === 'ip_main' ? 'font-mono' : ''}`}>
-                        <InlineCell
-                          value={s[col.key] || ''}
-                          type={col.type}
-                          onSave={(v) => handleInlineSave(s, col.key, v)}
-                          highlightQuery={search}
-                          fieldKey={col.key}
-                          existingValues={col.key === 'provider' ? providers : col.key === 'email' ? emails : undefined}
-                        />
+                      <td
+                        key={col.key}
+                        className={`border-r border-border ${col.key === 'ids' ? 'font-mono font-medium text-primary' : ''} ${col.key === 'ip_main' ? 'font-mono' : ''}`}
+                        onContextMenu={col.key === 'provider' ? (e) => handleProviderContextMenu(e, s.provider || '') : undefined}
+                      >
+                        {col.key === 'provider' ? (
+                          <div className="relative group">
+                            <InlineCell
+                              value={s[col.key] || ''}
+                              type={col.type}
+                              onSave={(v) => {
+                                handleInlineSave(s, col.key, v);
+                                // Auto-assign URL if provider has one stored
+                                // (no action needed, URL is linked by provider name)
+                              }}
+                              highlightQuery={search}
+                              fieldKey={col.key}
+                              existingValues={providers}
+                            />
+                            {s.provider && providerUrls[s.provider.toLowerCase()] && (
+                              <div className="absolute bottom-full left-0 mb-1 hidden group-hover:flex z-50 items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs shadow-lg border border-border bg-card text-foreground whitespace-nowrap">
+                                <Link2 className="w-3 h-3 text-primary" />
+                                <a
+                                  href={providerUrls[s.provider.toLowerCase()]}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-primary hover:underline font-medium truncate max-w-[200px]"
+                                  onClick={e => e.stopPropagation()}
+                                >
+                                  {providerUrls[s.provider.toLowerCase()]}
+                                </a>
+                                <ExternalLink className="w-3 h-3 text-muted-foreground" />
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <InlineCell
+                            value={s[col.key] || ''}
+                            type={col.type}
+                            onSave={(v) => handleInlineSave(s, col.key, v)}
+                            highlightQuery={search}
+                            fieldKey={col.key}
+                            existingValues={col.key === 'email' ? emails : undefined}
+                          />
+                        )}
                       </td>
                     ))}
                     <td className="border-r border-border">
