@@ -193,6 +193,8 @@ export default function SmtpHealthPage() {
   function handleCellDoubleClick(rowIdx: number, colDay: number, e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
+    if (clickTimerRef.current) { clearTimeout(clickTimerRef.current); clickTimerRef.current = null; }
+    setPopup(null);
     setSelecting(true);
     setSelectCol(colDay);
     setSelectStartRow(rowIdx);
