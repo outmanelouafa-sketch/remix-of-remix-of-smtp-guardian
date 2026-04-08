@@ -727,14 +727,26 @@ export default function SmtpHealthPage() {
               placeholder="Note (optional)"
               className="w-full glass-input rounded-lg px-3 py-2 text-sm text-foreground outline-none mb-3"
             />
-            <button
-              onClick={handleSaveStatus}
-              disabled={!selectedStatus || saving}
-              className="w-full glass-button rounded-lg py-2 text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2"
-            >
-              {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-              Save
-            </button>
+            <div className="flex gap-2">
+              {statusMap[`${popup.serverId}_${popup.date}`] && (
+                <button
+                  onClick={handleDeleteStatus}
+                  disabled={saving}
+                  className="flex-1 rounded-lg py-2 text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2 border border-destructive/30 text-destructive hover:bg-destructive/10 transition-colors"
+                >
+                  {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+                  <Trash2 className="w-3.5 h-3.5" /> Clear
+                </button>
+              )}
+              <button
+                onClick={handleSaveStatus}
+                disabled={!selectedStatus || saving}
+                className="flex-1 glass-button rounded-lg py-2 text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+                Save
+              </button>
+            </div>
           </div>
         </div>
       )}
