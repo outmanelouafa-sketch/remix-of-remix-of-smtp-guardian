@@ -4,7 +4,7 @@ import { useAuth } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
 import { STATUS_CONFIG, getDrnDays, getDrnColor } from '@/lib/statusColors';
 import { toast } from 'sonner';
-import { ChevronLeft, ChevronRight, Loader2, X, Copy, Shield, Users, UserPlus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Loader2, X, Copy, Shield, Users, UserPlus, Trash2 } from 'lucide-react';
 
 interface ContextMenu {
   serverId: string;
