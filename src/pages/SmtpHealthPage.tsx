@@ -649,15 +649,17 @@ export default function SmtpHealthPage() {
                         }`}
                         style={isToday(d) ? { borderLeft: '2px solid hsl(217 91% 64%)', borderRight: '2px solid hsl(217 91% 64%)' } : undefined}
                         onClick={e => {
+                          if (selecting) return;
                           if (selectedCells.size > 0) {
                             clearSelection();
                             return;
                           }
-                          // Delay single-click to allow double-click to cancel it
                           if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
                           const evt = { clientX: e.clientX, clientY: e.clientY };
                           clickTimerRef.current = setTimeout(() => {
-                            handleCellClick(server.id, d, evt as React.MouseEvent);
+                            if (!selecting) {
+                              handleCellClick(server.id, d, evt as React.MouseEvent);
+                            }
                             clickTimerRef.current = null;
                           }, 250);
                         }}
