@@ -575,9 +575,6 @@ export default function ServersPage() {
               <strong>{serverAlerts.length}</strong> server alert{serverAlerts.length > 1 ? 's' : ''} in last 24h
             </span>
           </div>
-          <a href="/notifications" className="text-xs text-primary hover:underline font-medium">
-            View All →
-          </a>
         </div>
       )}
 
