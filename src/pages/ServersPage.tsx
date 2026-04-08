@@ -110,8 +110,10 @@ function InlineCell({ value, type, onSave, highlightQuery, fieldKey, existingVal
   const [draft, setDraft] = useState(value);
   const [showDropdown, setShowDropdown] = useState(false);
   const [customInput, setCustomInput] = useState(false);
+  const [dropdownPosition, setDropdownPosition] = useState({ left: 0, top: 0 });
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (editing) {
@@ -154,23 +156,43 @@ function InlineCell({ value, type, onSave, highlightQuery, fieldKey, existingVal
     }
   };
 
+  const handleEditClick = () => {
+    setEditing(true);
+    if (existingValues && existingValues.length > 0) {
+      setShowDropdown(true);
+      setCustomInput(false);
+      // Calculate position after state update
+      setTimeout(() => {
+        if (containerRef.current) {
+          const rect = containerRef.current.getBoundingClientRect();
+          setDropdownPosition({
+            left: rect.left,
+            top: rect.bottom + 4,
+          });
+        }
+      }, 0);
+    }
+  };
+
   if (!editing) {
     return (
       <div
-        onClick={() => {
-          setEditing(true);
-          if (existingValues && existingValues.length > 0) {
-            setShowDropdown(true);
-            setCustomInput(false);
-          }
-        }}
+        ref={containerRef}
+        onClick={handleEditClick}
         className="cursor-pointer min-h-[20px] w-full truncate hover:bg-primary/5 rounded px-0.5 -mx-0.5 relative"
         title="Click to edit"
       >
         {value ? (highlightQuery ? <HighlightText text={value} query={highlightQuery} /> : value) : <span className="text-muted-foreground/40">—</span>}
         
         {showDropdown && existingValues && (
-          <div ref={dropdownRef} className="absolute top-full left-0 mt-1 z-50 glass-card rounded-lg shadow-lg border border-border min-w-[200px] max-h-[200px] overflow-y-auto">
+          <div 
+            ref={dropdownRef} 
+            className="fixed z-[100] glass-card rounded-lg shadow-lg border border-border min-w-[200px] max-h-[200px] overflow-y-auto"
+            style={{
+              left: dropdownPosition.left,
+              top: dropdownPosition.top,
+            }}
+          >
             {!customInput ? (
               <div className="py-1">
                 {existingValues.map((existingValue) => (
@@ -211,8 +233,15 @@ function InlineCell({ value, type, onSave, highlightQuery, fieldKey, existingVal
 
   if (showDropdown && existingValues && !customInput) {
     return (
-      <div ref={dropdownRef} className="relative">
-        <div className="absolute top-full left-0 mt-1 z-50 glass-card rounded-lg shadow-lg border border-border min-w-[200px] max-h-[200px] overflow-y-auto">
+      <div ref={containerRef} className="relative">
+        <div 
+          ref={dropdownRef} 
+          className="fixed z-[100] glass-card rounded-lg shadow-lg border border-border min-w-[200px] max-h-[200px] overflow-y-auto"
+          style={{
+            left: dropdownPosition.left,
+            top: dropdownPosition.top,
+          }}
+        >
           <div className="py-1">
             {existingValues.map((existingValue) => (
               <button
@@ -236,7 +265,7 @@ function InlineCell({ value, type, onSave, highlightQuery, fieldKey, existingVal
   }
 
   return (
-    <div className="flex items-center gap-1">
+    <div ref={containerRef} className="flex items-center gap-1 relative">
       <input
         ref={inputRef}
         type={type || 'text'}
@@ -295,8 +324,19 @@ export default function ServersPage() {
         }
       )
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, []);
+    
+    // Subscribe to assignment changes
+    const assignmentChannel = supabase.channel('server-assignments')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'server_smtp_assignments' }, 
+        () => loadAssignments()
+      )
+      .subscribe();
+    
+    return () => { 
+      supabase.removeChannel(channel); 
+      supabase.removeChannel(assignmentChannel);
+    };
+  }, [user?.id]);
 
   // Close single assign popup and provider URL menu on click outside
   useEffect(() => {

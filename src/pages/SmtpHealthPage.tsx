@@ -67,21 +67,21 @@ export default function SmtpHealthPage() {
       .subscribe();
     
     return () => { supabase.removeChannel(assignmentChannel); };
-  }, [month, year]);
-
-  // Reload data when SMTP manager changes (without showing loading)
-  useEffect(() => {
-    if (user?.role === 'boss' || user?.role === 'server_manager') {
-      loadData(true); // skipLoading = true
-    }
-  }, [selectedSmtpManager]);
+  }, [month, year, user?.id]);
 
   // Instant section switching (no reload)
   useEffect(() => {
     if (user?.role === 'boss' || user?.role === 'server_manager') {
       setServers(allSectionServers[section] || []);
     }
-  }, [section]);
+  }, [section, allSectionServers]);
+
+  // Reload data when SMTP manager filter changes (without showing loading)
+  useEffect(() => {
+    if (user?.role === 'boss' || user?.role === 'server_manager') {
+      loadData(true); // skipLoading = true - this will update allSectionServers
+    }
+  }, [selectedSmtpManager, user?.id]);
 
   async function loadSmtpManagers() {
     // Only load for boss and server_manager
@@ -114,9 +114,35 @@ export default function SmtpHealthPage() {
 
     // Load servers for all sections if user can view all
     if (canViewAllSections) {
+      // Check if filtering by specific SMTP manager
+      let assignedServerIds: string[] | null = null;
+      if (selectedSmtpManager) {
+        const { data: assignments } = await supabase
+          .from('server_smtp_assignments')
+          .select('server_id')
+          .eq('smtp_manager_id', selectedSmtpManager);
+        assignedServerIds = assignments?.map(a => a.server_id) || [];
+      }
+
+      let prodQuery = supabase.from('servers').select('*').eq('section', 'production');
+      let suspQuery = supabase.from('servers').select('*').eq('section', 'suspended');
+      
+      // Apply SMTP manager filter if a manager is selected
+      if (selectedSmtpManager && assignedServerIds !== null) {
+        if (assignedServerIds.length > 0) {
+          // Manager has servers - show only those
+          prodQuery = prodQuery.in('id', assignedServerIds);
+          suspQuery = suspQuery.in('id', assignedServerIds);
+        } else {
+          // Manager has NO servers - return empty results
+          prodQuery = prodQuery.eq('id', '00000000-0000-0000-0000-000000000000'); // Impossible ID
+          suspQuery = suspQuery.eq('id', '00000000-0000-0000-0000-000000000000');
+        }
+      }
+
       const [prodRes, suspRes, stRes, fRes] = await Promise.all([
-        supabase.from('servers').select('*').eq('section', 'production').order('ids'),
-        supabase.from('servers').select('*').eq('section', 'suspended').order('ids'),
+        prodQuery.order('ids'),
+        suspQuery.order('ids'),
         supabase.from('smtp_status').select('*').gte('date', startDate).lte('date', endDate),
         supabase.from('server_flags').select('*'),
       ]);

@@ -35,7 +35,7 @@ export default function DashboardPage() {
         .subscribe()
     );
     return () => { channels.forEach(c => supabase.removeChannel(c)); };
-  }, []);
+  }, [user?.id]);
 
   useEffect(() => {
     // Reload data when date or SMTP manager filter changes
@@ -60,7 +60,7 @@ export default function DashboardPage() {
 
     // Check if user is smtp_manager - filter by their assigned servers
     const isSmtpManager = user?.role === 'smtp_manager';
-    let assignedServerIds: string[] = [];
+    let assignedServerIds: string[] | null = null;
 
     if (isSmtpManager && user?.id) {
       const { data: assignments } = await supabase
@@ -79,17 +79,28 @@ export default function DashboardPage() {
 
     // Build servers query
     let serversQuery = supabase.from('servers').select('*');
-    if (assignedServerIds.length > 0) {
-      serversQuery = serversQuery.in('id', assignedServerIds);
+    if (assignedServerIds !== null) {
+      if (assignedServerIds.length > 0) {
+        serversQuery = serversQuery.in('id', assignedServerIds);
+      } else {
+        // Selected manager has no servers - return empty
+        serversQuery = serversQuery.eq('id', '00000000-0000-0000-0000-000000000000');
+      }
     }
 
     // Build statuses queries
     let todayStatusQuery = supabase.from('smtp_status').select('*').eq('date', today);
     let allStatusQuery = supabase.from('smtp_status').select('*').gte('date', twoWeeksAgo).lte('date', today);
     
-    if (assignedServerIds.length > 0) {
-      todayStatusQuery = todayStatusQuery.in('server_id', assignedServerIds);
-      allStatusQuery = allStatusQuery.in('server_id', assignedServerIds);
+    if (assignedServerIds !== null) {
+      if (assignedServerIds.length > 0) {
+        todayStatusQuery = todayStatusQuery.in('server_id', assignedServerIds);
+        allStatusQuery = allStatusQuery.in('server_id', assignedServerIds);
+      } else {
+        // Return empty results
+        todayStatusQuery = todayStatusQuery.eq('server_id', '00000000-0000-0000-0000-000000000000');
+        allStatusQuery = allStatusQuery.eq('server_id', '00000000-0000-0000-0000-000000000000');
+      }
     }
 
     // Build delistings query
