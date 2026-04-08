@@ -578,6 +578,9 @@ export default function SmtpHealthPage() {
             <button onClick={copySelectedCells} className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 font-semibold">
               <Copy className="w-3 h-3" /> Copy
             </button>
+            <button onClick={handleDeleteSelectedStatuses} className="flex items-center gap-1 text-xs text-destructive hover:text-destructive/80 font-semibold">
+              <Trash2 className="w-3 h-3" /> Clear
+            </button>
             <button onClick={clearSelection} className="text-xs text-muted-foreground hover:text-foreground">
               <X className="w-3 h-3" />
             </button>
