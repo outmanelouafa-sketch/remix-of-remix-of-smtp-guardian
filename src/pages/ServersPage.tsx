@@ -969,6 +969,81 @@ export default function ServersPage() {
           </div>
         </div>
       )}
+
+      {/* Provider URL Context Menu */}
+      {providerUrlMenu && (
+        <div
+          className="fixed z-[100] min-w-[280px] rounded-xl border border-border bg-card shadow-2xl animate-fade-in overflow-hidden"
+          style={{ left: providerUrlMenu.x, top: providerUrlMenu.y }}
+          onClick={e => e.stopPropagation()}
+        >
+          <div className="px-3 py-2 border-b border-border bg-muted/30 flex items-center gap-2">
+            <Link2 className="w-3.5 h-3.5 text-primary" />
+            <span className="text-xs font-semibold text-foreground">{providerUrlMenu.provider}</span>
+          </div>
+          <div className="p-2 space-y-2">
+            {providerUrls[providerUrlMenu.provider.toLowerCase()] && !showProviderUrlInput ? (
+              <>
+                <a
+                  href={providerUrls[providerUrlMenu.provider.toLowerCase()]}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 w-full px-3 py-2 text-sm rounded-lg hover:bg-primary/10 transition-colors text-primary"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  Visit Website
+                </a>
+                <button
+                  onClick={() => { setShowProviderUrlInput(true); setProviderUrlDraft(providerUrls[providerUrlMenu.provider.toLowerCase()]); }}
+                  className="flex items-center gap-2 w-full px-3 py-2 text-sm rounded-lg hover:bg-muted/50 transition-colors text-foreground"
+                >
+                  <Link2 className="w-3.5 h-3.5 text-muted-foreground" />
+                  Edit URL
+                </button>
+                <button
+                  onClick={async () => {
+                    const key = providerUrlMenu.provider.toLowerCase();
+                    await supabase.from('provider_urls').delete().eq('provider_name', key);
+                    setProviderUrls(prev => { const n = { ...prev }; delete n[key]; return n; });
+                    toast.success('URL removed');
+                    setProviderUrlMenu(null);
+                  }}
+                  className="flex items-center gap-2 w-full px-3 py-2 text-sm rounded-lg hover:bg-destructive/10 transition-colors text-destructive"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Remove URL
+                </button>
+              </>
+            ) : (
+              <div className="space-y-2">
+                <input
+                  ref={providerUrlInputRef}
+                  value={providerUrlDraft}
+                  onChange={e => setProviderUrlDraft(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') saveProviderUrl(providerUrlMenu.provider, providerUrlDraft); if (e.key === 'Escape') setProviderUrlMenu(null); }}
+                  placeholder="https://provider-website.com"
+                  className="w-full bg-primary/10 border border-primary/30 rounded-lg px-3 py-2 text-xs outline-none text-foreground"
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => saveProviderUrl(providerUrlMenu.provider, providerUrlDraft)}
+                    disabled={!providerUrlDraft}
+                    className="flex-1 px-3 py-1.5 text-xs font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 flex items-center justify-center gap-1"
+                  >
+                    <Check className="w-3 h-3" /> Save
+                  </button>
+                  <button
+                    onClick={() => setProviderUrlMenu(null)}
+                    className="px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground rounded-lg"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
