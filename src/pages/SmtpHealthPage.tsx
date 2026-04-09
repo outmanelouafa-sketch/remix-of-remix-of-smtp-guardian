@@ -883,9 +883,26 @@ export default function SmtpHealthPage() {
             </>
           )}
           
+          {/* Quick Status */}
+          <div className="px-3 py-1.5 bg-muted/30 border-t border-b border-border">
+            <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Quick Status (Today)</span>
+          </div>
+          <div className="flex flex-wrap gap-1.5 px-3 py-2">
+            {Object.entries(STATUS_CONFIG).map(([key, cfg]) => (
+              <button
+                key={key}
+                onClick={() => quickSetStatus(contextMenu.serverId, contextMenu.serverIds, key)}
+                className="px-2.5 py-1 rounded-md text-[10px] font-bold transition-all hover:scale-110 hover:shadow-lg"
+                style={{ color: cfg.color, background: cfg.bg }}
+              >
+                {key}
+              </button>
+            ))}
+          </div>
+
           <button
             onClick={() => toggleSblFlag(contextMenu.serverId, contextMenu.serverIds)}
-            className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm hover:bg-muted/50 transition-colors text-left"
+            className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm hover:bg-muted/50 transition-colors text-left border-t border-border"
           >
             <Shield className={`w-4 h-4 ${serverFlags[contextMenu.serverId] ? 'text-yellow-500' : 'text-muted-foreground'}`} />
             <span className="text-foreground">
