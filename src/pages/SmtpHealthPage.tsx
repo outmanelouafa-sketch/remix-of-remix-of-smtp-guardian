@@ -310,6 +310,34 @@ export default function SmtpHealthPage() {
     setContextMenu({ serverId: server.id, serverIds: server.ids, x: e.clientX, y: e.clientY });
   }
 
+  async function quickSetStatus(serverId: string, serverIds: string, status: string) {
+    const today = new Date();
+    const date = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    const existing = statusMap[`${serverId}_${date}`];
+
+    if (existing) {
+      const { error } = await supabase.from('smtp_status').update({
+        status,
+        updated_by: user!.name,
+        updated_at: new Date().toISOString(),
+      }).eq('id', existing.id);
+      if (error) { toast.error('Failed to update'); return; }
+      setStatuses(prev => prev.map(s => s.id === existing.id ? { ...s, status, updated_by: user!.name, updated_at: new Date().toISOString() } : s));
+    } else {
+      const { data, error } = await supabase.from('smtp_status').insert({
+        server_id: serverId,
+        date,
+        status,
+        updated_by: user!.name,
+      }).select().single();
+      if (error) { toast.error('Failed to set status'); return; }
+      setStatuses(prev => [...prev, data]);
+    }
+    await logActivity(user!.name, 'update_smtp_status', serverIds, `Quick set ${status} for ${date}`);
+    toast.success(`${serverIds} → ${status}`);
+    setContextMenu(null);
+  }
+
   async function toggleSblFlag(serverId: string, serverIds: string) {
     const existing = serverFlags[serverId];
     if (existing) {
@@ -855,9 +883,26 @@ export default function SmtpHealthPage() {
             </>
           )}
           
+          {/* Quick Status */}
+          <div className="px-3 py-1.5 bg-muted/30 border-t border-b border-border">
+            <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Quick Status (Today)</span>
+          </div>
+          <div className="flex flex-wrap gap-1.5 px-3 py-2">
+            {Object.entries(STATUS_CONFIG).map(([key, cfg]) => (
+              <button
+                key={key}
+                onClick={() => quickSetStatus(contextMenu.serverId, contextMenu.serverIds, key)}
+                className="px-2.5 py-1 rounded-md text-[10px] font-bold transition-all hover:scale-110 hover:shadow-lg"
+                style={{ color: cfg.color, background: cfg.bg }}
+              >
+                {key}
+              </button>
+            ))}
+          </div>
+
           <button
             onClick={() => toggleSblFlag(contextMenu.serverId, contextMenu.serverIds)}
-            className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm hover:bg-muted/50 transition-colors text-left"
+            className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm hover:bg-muted/50 transition-colors text-left border-t border-border"
           >
             <Shield className={`w-4 h-4 ${serverFlags[contextMenu.serverId] ? 'text-yellow-500' : 'text-muted-foreground'}`} />
             <span className="text-foreground">
