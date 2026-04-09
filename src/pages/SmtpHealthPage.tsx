@@ -310,6 +310,34 @@ export default function SmtpHealthPage() {
     setContextMenu({ serverId: server.id, serverIds: server.ids, x: e.clientX, y: e.clientY });
   }
 
+  async function quickSetStatus(serverId: string, serverIds: string, status: string) {
+    const today = new Date();
+    const date = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    const existing = statusMap[`${serverId}_${date}`];
+
+    if (existing) {
+      const { error } = await supabase.from('smtp_status').update({
+        status,
+        updated_by: user!.name,
+        updated_at: new Date().toISOString(),
+      }).eq('id', existing.id);
+      if (error) { toast.error('Failed to update'); return; }
+      setStatuses(prev => prev.map(s => s.id === existing.id ? { ...s, status, updated_by: user!.name, updated_at: new Date().toISOString() } : s));
+    } else {
+      const { data, error } = await supabase.from('smtp_status').insert({
+        server_id: serverId,
+        date,
+        status,
+        updated_by: user!.name,
+      }).select().single();
+      if (error) { toast.error('Failed to set status'); return; }
+      setStatuses(prev => [...prev, data]);
+    }
+    await logActivity(user!.name, 'update_smtp_status', serverIds, `Quick set ${status} for ${date}`);
+    toast.success(`${serverIds} → ${status}`);
+    setContextMenu(null);
+  }
+
   async function toggleSblFlag(serverId: string, serverIds: string) {
     const existing = serverFlags[serverId];
     if (existing) {
