@@ -55,74 +55,84 @@ export default function DashboardPage() {
 
   async function loadData() {
     setLoading(true);
-    const today = dateFilter;
-    const twoWeeksAgo = new Date(new Date(dateFilter).getTime() - 14 * 86400000).toISOString().split('T')[0];
+    try {
+      const today = dateFilter;
+      const twoWeeksAgo = new Date(new Date(dateFilter).getTime() - 14 * 86400000).toISOString().split('T')[0];
 
-    // Check if user is smtp_manager - filter by their assigned servers
-    const isSmtpManager = user?.role === 'smtp_manager';
-    let assignedServerIds: string[] | null = null;
+      // Check if user is smtp_manager - filter by their assigned servers
+      const isSmtpManager = user?.role === 'smtp_manager';
+      let assignedServerIds: string[] | null = null;
 
-    if (isSmtpManager && user?.id) {
-      const { data: assignments } = await supabase
-        .from('server_smtp_assignments')
-        .select('server_id')
-        .eq('smtp_manager_id', user.id);
-      assignedServerIds = assignments?.map(a => a.server_id) || [];
-    } else if ((user?.role === 'boss' || user?.role === 'server_manager') && selectedSmtpManager) {
-      // Boss/server_manager viewing specific SMTP manager's data
-      const { data: assignments } = await supabase
-        .from('server_smtp_assignments')
-        .select('server_id')
-        .eq('smtp_manager_id', selectedSmtpManager);
-      assignedServerIds = assignments?.map(a => a.server_id) || [];
-    }
-
-    // Build servers query
-    let serversQuery = supabase.from('servers').select('*');
-    if (assignedServerIds !== null) {
-      if (assignedServerIds.length > 0) {
-        serversQuery = serversQuery.in('id', assignedServerIds);
-      } else {
-        // Selected manager has no servers - return empty
-        serversQuery = serversQuery.eq('id', '00000000-0000-0000-0000-000000000000');
+      if (isSmtpManager && user?.id) {
+        const { data: assignments } = await supabase
+          .from('server_smtp_assignments')
+          .select('server_id')
+          .eq('smtp_manager_id', user.id);
+        assignedServerIds = assignments?.map(a => a.server_id) || [];
+      } else if ((user?.role === 'boss' || user?.role === 'server_manager') && selectedSmtpManager) {
+        // Boss/server_manager viewing specific SMTP manager's data
+        const { data: assignments } = await supabase
+          .from('server_smtp_assignments')
+          .select('server_id')
+          .eq('smtp_manager_id', selectedSmtpManager);
+        assignedServerIds = assignments?.map(a => a.server_id) || [];
       }
-    }
 
-    // Build statuses queries
-    let todayStatusQuery = supabase.from('smtp_status').select('*').eq('date', today);
-    let allStatusQuery = supabase.from('smtp_status').select('*').gte('date', twoWeeksAgo).lte('date', today);
-    
-    if (assignedServerIds !== null) {
-      if (assignedServerIds.length > 0) {
-        todayStatusQuery = todayStatusQuery.in('server_id', assignedServerIds);
-        allStatusQuery = allStatusQuery.in('server_id', assignedServerIds);
-      } else {
-        // Return empty results
-        todayStatusQuery = todayStatusQuery.eq('server_id', '00000000-0000-0000-0000-000000000000');
-        allStatusQuery = allStatusQuery.eq('server_id', '00000000-0000-0000-0000-000000000000');
+      // Build servers query
+      let serversQuery = supabase.from('servers').select('*');
+      if (assignedServerIds !== null) {
+        if (assignedServerIds.length > 0) {
+          serversQuery = serversQuery.in('id', assignedServerIds);
+        } else {
+          // Selected manager has no servers - return empty
+          serversQuery = serversQuery.eq('id', '00000000-0000-0000-0000-000000000000');
+        }
       }
+
+      // Build statuses queries
+      let todayStatusQuery = supabase.from('smtp_status').select('*').eq('date', today);
+      let allStatusQuery = supabase.from('smtp_status').select('*').gte('date', twoWeeksAgo).lte('date', today);
+      
+      if (assignedServerIds !== null) {
+        if (assignedServerIds.length > 0) {
+          todayStatusQuery = todayStatusQuery.in('server_id', assignedServerIds);
+          allStatusQuery = allStatusQuery.in('server_id', assignedServerIds);
+        } else {
+          // Return empty results
+          todayStatusQuery = todayStatusQuery.eq('server_id', '00000000-0000-0000-0000-000000000000');
+          allStatusQuery = allStatusQuery.eq('server_id', '00000000-0000-0000-0000-000000000000');
+        }
+      }
+
+      // Build delistings query
+      let delistingsQuery = supabase.from('delistings').select('*');
+      if (assignedServerIds !== null) {
+        if (assignedServerIds.length > 0) {
+          delistingsQuery = delistingsQuery.in('server_id', assignedServerIds);
+        } else {
+          // Return empty results
+          delistingsQuery = delistingsQuery.eq('server_id', '00000000-0000-0000-0000-000000000000');
+        }
+      }
+
+      const [sRes, stRes, stAllRes, dRes, aRes] = await Promise.all([
+        serversQuery,
+        todayStatusQuery,
+        allStatusQuery,
+        delistingsQuery,
+        supabase.from('activity_log').select('*').order('created_at', { ascending: false }).limit(10),
+      ]);
+
+      setServers(sRes.data || []);
+      setStatuses(stRes.data || []);
+      setAllStatuses(stAllRes.data || []);
+      setDelistings(dRes.data || []);
+      setActivities(aRes.data || []);
+    } catch (error) {
+      console.error('Error loading dashboard data:', error);
+    } finally {
+      setLoading(false);
     }
-
-    // Build delistings query
-    let delistingsQuery = supabase.from('delistings').select('*');
-    if (assignedServerIds.length > 0) {
-      delistingsQuery = delistingsQuery.in('server_id', assignedServerIds);
-    }
-
-    const [sRes, stRes, stAllRes, dRes, aRes] = await Promise.all([
-      serversQuery,
-      todayStatusQuery,
-      allStatusQuery,
-      delistingsQuery,
-      supabase.from('activity_log').select('*').order('created_at', { ascending: false }).limit(10),
-    ]);
-
-    setServers(sRes.data || []);
-    setStatuses(stRes.data || []);
-    setAllStatuses(stAllRes.data || []);
-    setDelistings(dRes.data || []);
-    setActivities(aRes.data || []);
-    setLoading(false);
   }
 
   // Derived analytics
