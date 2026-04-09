@@ -729,63 +729,89 @@ export default function SmtpHealthPage() {
         </div>
       </div>
 
-      {/* Popup - Anchored Popover */}
+      {/* Bottom Sheet Status Panel */}
       {popup && (
         <>
-          <div className="fixed inset-0 z-40" onClick={() => setPopup(null)} />
+          <div className="fixed inset-0 z-40 bg-background/40 backdrop-blur-sm" onClick={() => setPopup(null)} />
           <div
-            className="fixed z-50 glass-card rounded-xl p-5 w-80 animate-fade-in shadow-2xl border border-border"
-            style={{
-              left: Math.min(popup.x, window.innerWidth - 340),
-              top: popup.y + 20 > window.innerHeight - 300
-                ? Math.max(10, popup.y - 280)
-                : popup.y + 10,
-            }}
+            className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-card shadow-[0_-8px_30px_rgba(0,0,0,0.3)] animate-slide-up"
             onClick={e => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold text-foreground">Set Status — {popup.date}</h3>
-              <button onClick={() => setPopup(null)} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
+            {/* Handle bar */}
+            <div className="flex justify-center pt-2 pb-1">
+              <div className="w-10 h-1 rounded-full bg-muted-foreground/30" />
             </div>
-            <div className="flex flex-wrap gap-2 mb-3">
-              {Object.entries(STATUS_CONFIG).map(([key, cfg]) => (
-                <button
-                  key={key}
-                  onClick={() => setSelectedStatus(key)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                    selectedStatus === key ? 'ring-2 ring-offset-1 ring-offset-card' : ''
-                  }`}
-                  style={{ color: cfg.color, background: cfg.bg, ...(selectedStatus === key ? { ringColor: cfg.color } : {}) }}
-                >
-                  {key}
+            <div className="max-w-3xl mx-auto px-6 pb-5 pt-2">
+              {/* Header row */}
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-4">
+                  <div>
+                    <span className="text-xs text-muted-foreground">Server</span>
+                    <p className="text-sm font-bold text-foreground">{servers.find(s => s.id === popup.serverId)?.ids || '—'}</p>
+                  </div>
+                  <div className="w-px h-8 bg-border" />
+                  <div>
+                    <span className="text-xs text-muted-foreground">Date</span>
+                    <p className="text-sm font-bold text-foreground">{popup.date}</p>
+                  </div>
+                  {statusMap[`${popup.serverId}_${popup.date}`] && (
+                    <>
+                      <div className="w-px h-8 bg-border" />
+                      <div>
+                        <span className="text-xs text-muted-foreground">Current</span>
+                        <p className="text-sm font-bold" style={{ color: STATUS_CONFIG[statusMap[`${popup.serverId}_${popup.date}`].status]?.color }}>
+                          {statusMap[`${popup.serverId}_${popup.date}`].status}
+                        </p>
+                      </div>
+                    </>
+                  )}
+                </div>
+                <button onClick={() => setPopup(null)} className="text-muted-foreground hover:text-foreground transition-colors p-1 rounded-lg hover:bg-muted/50">
+                  <X className="w-5 h-5" />
                 </button>
-              ))}
-            </div>
-            <input
-              value={note}
-              onChange={e => setNote(e.target.value)}
-              placeholder="Note (optional)"
-              className="w-full glass-input rounded-lg px-3 py-2 text-sm text-foreground outline-none mb-3"
-            />
-            <div className="flex gap-2">
-              {statusMap[`${popup.serverId}_${popup.date}`] && (
+              </div>
+              {/* Status buttons */}
+              <div className="flex flex-wrap gap-2 mb-4">
+                {Object.entries(STATUS_CONFIG).map(([key, cfg]) => (
+                  <button
+                    key={key}
+                    onClick={() => { setSelectedStatus(key); }}
+                    className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${
+                      selectedStatus === key ? 'ring-2 ring-offset-2 ring-offset-card scale-105' : 'hover:scale-105'
+                    }`}
+                    style={{ color: cfg.color, background: cfg.bg, ...(selectedStatus === key ? { boxShadow: `0 0 12px ${cfg.color}40` } : {}) }}
+                  >
+                    {key}
+                  </button>
+                ))}
+              </div>
+              {/* Note + actions */}
+              <div className="flex items-center gap-3">
+                <input
+                  value={note}
+                  onChange={e => setNote(e.target.value)}
+                  placeholder="Note (optional)"
+                  className="flex-1 glass-input rounded-lg px-3 py-2 text-sm text-foreground outline-none"
+                />
+                {statusMap[`${popup.serverId}_${popup.date}`] && (
+                  <button
+                    onClick={handleDeleteStatus}
+                    disabled={saving}
+                    className="rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50 flex items-center gap-2 border border-destructive/30 text-destructive hover:bg-destructive/10 transition-colors"
+                  >
+                    {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+                    <Trash2 className="w-3.5 h-3.5" /> Clear
+                  </button>
+                )}
                 <button
-                  onClick={handleDeleteStatus}
-                  disabled={saving}
-                  className="flex-1 rounded-lg py-2 text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2 border border-destructive/30 text-destructive hover:bg-destructive/10 transition-colors"
+                  onClick={handleSaveStatus}
+                  disabled={!selectedStatus || saving}
+                  className="glass-button rounded-lg px-6 py-2 text-sm font-medium disabled:opacity-50 flex items-center gap-2"
                 >
                   {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-                  <Trash2 className="w-3.5 h-3.5" /> Clear
+                  Save
                 </button>
-              )}
-              <button
-                onClick={handleSaveStatus}
-                disabled={!selectedStatus || saving}
-                className="flex-1 glass-button rounded-lg py-2 text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-                Save
-              </button>
+              </div>
             </div>
           </div>
         </>
