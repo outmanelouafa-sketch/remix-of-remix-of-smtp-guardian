@@ -729,10 +729,20 @@ export default function SmtpHealthPage() {
         </div>
       </div>
 
-      {/* Popup */}
+      {/* Popup - Anchored Popover */}
       {popup && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/50" onClick={() => setPopup(null)}>
-          <div className="glass-card rounded-xl p-5 w-80 animate-fade-in" onClick={e => e.stopPropagation()}>
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setPopup(null)} />
+          <div
+            className="fixed z-50 glass-card rounded-xl p-5 w-80 animate-fade-in shadow-2xl border border-border"
+            style={{
+              left: Math.min(popup.x, window.innerWidth - 340),
+              top: popup.y + 20 > window.innerHeight - 300
+                ? Math.max(10, popup.y - 280)
+                : popup.y + 10,
+            }}
+            onClick={e => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-semibold text-foreground">Set Status — {popup.date}</h3>
               <button onClick={() => setPopup(null)} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
@@ -778,7 +788,7 @@ export default function SmtpHealthPage() {
               </button>
             </div>
           </div>
-        </div>
+        </>
       )}
 
       {/* Context Menu */}
