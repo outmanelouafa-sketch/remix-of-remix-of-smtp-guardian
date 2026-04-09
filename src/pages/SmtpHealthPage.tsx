@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
@@ -730,19 +731,17 @@ export default function SmtpHealthPage() {
       </div>
 
       {/* Bottom Sheet Status Panel */}
-      {popup && (
+      {popup && createPortal(
         <>
-          <div className="fixed inset-0 z-40 bg-background/40 backdrop-blur-sm" onClick={() => setPopup(null)} />
+          <div className="fixed inset-0 z-[200] bg-background/40 backdrop-blur-sm" onClick={() => setPopup(null)} />
           <div
-            className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-card shadow-[0_-8px_30px_rgba(0,0,0,0.3)] animate-slide-up"
+            className="fixed bottom-0 left-0 right-0 z-[201] border-t border-border bg-card shadow-[0_-8px_30px_rgba(0,0,0,0.3)] animate-slide-up"
             onClick={e => e.stopPropagation()}
           >
-            {/* Handle bar */}
             <div className="flex justify-center pt-2 pb-1">
               <div className="w-10 h-1 rounded-full bg-muted-foreground/30" />
             </div>
             <div className="max-w-3xl mx-auto px-6 pb-5 pt-2">
-              {/* Header row */}
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-4">
                   <div>
@@ -770,7 +769,6 @@ export default function SmtpHealthPage() {
                   <X className="w-5 h-5" />
                 </button>
               </div>
-              {/* Status buttons */}
               <div className="flex flex-wrap gap-2 mb-4">
                 {Object.entries(STATUS_CONFIG).map(([key, cfg]) => (
                   <button
@@ -785,7 +783,6 @@ export default function SmtpHealthPage() {
                   </button>
                 ))}
               </div>
-              {/* Note + actions */}
               <div className="flex items-center gap-3">
                 <input
                   value={note}
@@ -814,7 +811,8 @@ export default function SmtpHealthPage() {
               </div>
             </div>
           </div>
-        </>
+        </>,
+        document.body
       )}
 
       {/* Context Menu */}
