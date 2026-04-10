@@ -18,6 +18,7 @@ export default function DashboardPage() {
   const [allStatuses, setAllStatuses] = useState<any[]>([]);
   const [delistings, setDelistings] = useState<any[]>([]);
   const [activities, setActivities] = useState<any[]>([]);
+  const [serverFlags, setServerFlags] = useState<any[]>([]);
   
   // Date filter state
   const [dateFilter, setDateFilter] = useState(new Date().toISOString().split('T')[0]);
@@ -115,12 +116,23 @@ export default function DashboardPage() {
         }
       }
 
-      const [sRes, stRes, stAllRes, dRes, aRes] = await Promise.all([
+      // Build server flags query
+      let serverFlagsQuery = supabase.from('server_flags').select('*');
+      if (assignedServerIds !== null) {
+        if (assignedServerIds.length > 0) {
+          serverFlagsQuery = serverFlagsQuery.in('server_id', assignedServerIds);
+        } else {
+          serverFlagsQuery = serverFlagsQuery.eq('server_id', '00000000-0000-0000-0000-000000000000');
+        }
+      }
+
+      const [sRes, stRes, stAllRes, dRes, aRes, fRes] = await Promise.all([
         serversQuery,
         todayStatusQuery,
         allStatusQuery,
         delistingsQuery,
         supabase.from('activity_log').select('*').order('created_at', { ascending: false }).limit(10),
+        serverFlagsQuery,
       ]);
 
       setServers(sRes.data || []);
@@ -128,6 +140,7 @@ export default function DashboardPage() {
       setAllStatuses(stAllRes.data || []);
       setDelistings(dRes.data || []);
       setActivities(aRes.data || []);
+      setServerFlags(fRes.data || []);
     } catch (error) {
       console.error('Error loading dashboard data:', error);
     } finally {
@@ -201,20 +214,22 @@ export default function DashboardPage() {
     const previousDayPct = previousDayTotal > 0 ? Math.round((previousDayClean / previousDayTotal) * 100) : 100;
     const healthDelta = healthPct - previousDayPct;
 
+    const splCount = serverFlags.filter(f => f.flag_type === 'SBL').length;
+
     return {
       production, suspended, expiringSoon,
       todayBL, todaySH, todayClean,
       delistingsThisWeek, delistingsToday, approvedThisWeek,
       trendData, providerData, statusPieData,
-      healthPct, healthDelta, totalToday,
+      healthPct, healthDelta, totalToday, splCount,
     };
-  }, [servers, statuses, allStatuses, delistings]);
+  }, [servers, statuses, allStatuses, delistings, serverFlags]);
 
   if (loading) return <div className="flex items-center justify-center h-64"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>;
 
   const { production, suspended, expiringSoon, todayBL, todaySH, todayClean,
     delistingsThisWeek, delistingsToday, approvedThisWeek,
-    trendData, providerData, statusPieData, healthPct, healthDelta, totalToday } = analytics;
+    trendData, providerData, statusPieData, healthPct, healthDelta, totalToday, splCount } = analytics;
 
   const stats = [
     { label: 'Production', value: production.length, icon: Server, color: 'text-primary' },
@@ -222,6 +237,7 @@ export default function DashboardPage() {
     { label: 'Blacklisted', value: todayBL, icon: ShieldAlert, color: 'text-status-bl' },
     { label: 'Spamhaus', value: todaySH, icon: ShieldAlert, color: 'text-status-sh' },
     { label: 'Clean', value: todayClean, icon: CheckCircle2, color: 'text-status-clean' },
+    { label: 'SPL', value: splCount, icon: AlertTriangle, color: 'text-status-bl' },
     { label: 'Delistings', value: delistingsThisWeek, icon: ShieldCheck, color: 'text-primary' },
   ];
 
@@ -288,7 +304,7 @@ export default function DashboardPage() {
       )}
 
       {/* Stats row */}
-      <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
+      <div className="grid grid-cols-3 md:grid-cols-7 gap-3">
         {stats.map((s, i) => (
           <div key={i} className="glass-card rounded-xl p-3" style={{ animationDelay: `${i * 50}ms` }}>
             <div className="flex items-center gap-2 mb-1">

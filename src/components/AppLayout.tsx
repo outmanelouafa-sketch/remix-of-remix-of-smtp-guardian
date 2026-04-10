@@ -22,6 +22,8 @@ export default function AppLayout() {
   const [mobileOpen, setMobileOpen] = React.useState(false);
 
   const handleLogout = () => {
+    const confirmed = window.confirm('Are you sure you want to log out?');
+    if (!confirmed) return;
     logout();
     navigate('/login');
   };

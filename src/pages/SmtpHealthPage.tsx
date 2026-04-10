@@ -555,7 +555,7 @@ export default function SmtpHealthPage() {
       <div className="glass-card rounded-xl p-3 flex flex-wrap gap-3">
         {Object.entries(STATUS_CONFIG).map(([key, cfg]) => (
           <div key={key} className="flex items-center gap-1.5">
-            <div className="w-3 h-3 rounded-sm" style={{ background: cfg.color }} />
+            <div className="w-3 h-3 rounded-sm border border-black/10" style={{ background: cfg.bg }} />
             <span className="text-xs text-muted-foreground">{key} — {cfg.label}</span>
           </div>
         ))}
