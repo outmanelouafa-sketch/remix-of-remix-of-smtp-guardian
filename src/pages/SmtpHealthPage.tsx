@@ -142,8 +142,8 @@ export default function SmtpHealthPage() {
       }
 
       const [prodRes, suspRes, stRes, fRes] = await Promise.all([
-        prodQuery.order('ids'),
-        suspQuery.order('ids'),
+        prodQuery.order('created_at', { ascending: false }),
+        suspQuery.order('created_at', { ascending: false }),
         supabase.from('smtp_status').select('*').gte('date', startDate).lte('date', endDate),
         supabase.from('server_flags').select('*'),
       ]);
@@ -184,7 +184,7 @@ export default function SmtpHealthPage() {
       }
 
       const [sRes, stRes, fRes] = await Promise.all([
-        serversQuery.order('ids'),
+        serversQuery.order('created_at', { ascending: false }),
         supabase.from('smtp_status').select('*').gte('date', startDate).lte('date', endDate),
         supabase.from('server_flags').select('*'),
       ]);
