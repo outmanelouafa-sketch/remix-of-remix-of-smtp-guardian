@@ -546,8 +546,19 @@ export default function SmtpHealthPage() {
     clearSelection();
   }
 
-
   const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  const selectedManagerName = smtpManagers.find(m => m.id === selectedSmtpManager)?.name;
+  const isManagerFilterActive = (user?.role === 'boss' || user?.role === 'server_manager') && !!selectedSmtpManager;
+  const emptyTitle = isManagerFilterActive
+    ? `No ${section} servers assigned to ${selectedManagerName || 'this SMTP manager'}`
+    : search
+      ? `No ${section} servers match your search`
+      : `No ${section} servers`;
+  const emptyHint = isManagerFilterActive
+    ? 'Try switching manager or clear the manager filter.'
+    : search
+      ? 'Try a different search term or clear the search filter.'
+      : 'Add servers or switch section to see data here.';
 
   return (
     <div className="space-y-4 animate-fade-in">
@@ -751,7 +762,32 @@ export default function SmtpHealthPage() {
                 );
               })}
               {servers.length === 0 && (
-                <tr><td colSpan={3 + daysInMonth} className="text-center py-8 text-muted-foreground text-sm">No production servers</td></tr>
+                <tr>
+                  <td colSpan={3 + daysInMonth} className="text-center py-8">
+                    <div className="flex flex-col items-center gap-2">
+                      <p className="text-sm text-muted-foreground">{emptyTitle}</p>
+                      <p className="text-xs text-muted-foreground/80">{emptyHint}</p>
+                      <div className="flex items-center gap-2">
+                        {search && (
+                          <button
+                            onClick={() => setSearch('')}
+                            className="text-xs px-2 py-1 rounded-md border border-border text-muted-foreground hover:text-foreground hover:bg-secondary/40"
+                          >
+                            Clear Search
+                          </button>
+                        )}
+                        {isManagerFilterActive && (
+                          <button
+                            onClick={() => setSelectedSmtpManager('')}
+                            className="text-xs px-2 py-1 rounded-md border border-border text-muted-foreground hover:text-foreground hover:bg-secondary/40"
+                          >
+                            Clear Manager Filter
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </td>
+                </tr>
               )}
             </tbody>
           </table>
@@ -914,6 +950,7 @@ export default function SmtpHealthPage() {
           </button>
         </div>
       )}
+
     </div>
   );
 }
