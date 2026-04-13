@@ -790,7 +790,7 @@ export default function SmtpHealthPage() {
       {/* Grid */}
       <div className="glass-card rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
-          <table ref={tableRef} className="w-full border-collapse text-[11px]">
+          <table ref={tableRef} className="w-full border-collapse text-[11px]" data-resize-disabled="true">
             <thead>
               <tr>
                 <th className="sticky left-0 z-20 bg-card px-1.5 py-1.5 text-center border-r border-border w-[34px] min-w-[34px]">

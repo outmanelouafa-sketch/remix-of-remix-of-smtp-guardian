@@ -213,3 +213,32 @@
 .animate-slide-up {
   animation: slideUp 0.25s ease-out forwards;
 }
+
+.resizable-th {
+  position: relative;
+}
+
+.col-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  width: 8px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 40;
+}
+
+.col-resize-handle::after {
+  content: '';
+  position: absolute;
+  top: 20%;
+  bottom: 20%;
+  left: 3px;
+  width: 1px;
+  background: rgba(148, 163, 184, 0.35);
+  transition: background 0.15s ease;
+}
+
+.col-resize-handle:hover::after {
+  background: rgba(79, 142, 247, 0.9);
+}

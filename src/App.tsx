@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -12,6 +13,7 @@ import SmtpHealthPage from "./pages/SmtpHealthPage";
 import DelistingsPage from "./pages/DelistingsPage";
 import ActivityLogPage from "./pages/ActivityLogPage";
 import NotFound from "./pages/NotFound";
+import { enableGlobalTableResize } from "@/lib/tableResize";
 
 const queryClient = new QueryClient();
 
@@ -25,6 +27,9 @@ function ProtectedRoute({ children, roles }: { children: React.ReactNode; roles?
 
 function AppRoutes() {
   const { user, loading } = useAuth();
+  useEffect(() => {
+    return enableGlobalTableResize();
+  }, []);
   if (loading) return null;
 
   return (
