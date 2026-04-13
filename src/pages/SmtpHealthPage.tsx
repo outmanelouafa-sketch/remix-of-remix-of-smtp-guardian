@@ -402,6 +402,15 @@ export default function SmtpHealthPage() {
     const paintKey = `${server.id}_${date}`;
     if (paintedCellsRef.current.has(paintKey)) return;
     paintedCellsRef.current.add(paintKey);
+    if (brushStatus === '__CLEAR__') {
+      const existing = statusMap[`${server.id}_${date}`];
+      if (!existing) return;
+      const { error } = await supabase.from('smtp_status').delete().eq('id', existing.id);
+      if (error) return;
+      setStatuses(prev => prev.filter(s => s.id !== existing.id));
+      await logActivity(user!.name, 'delete_smtp_status', server.ids, `Cleared status for ${date}`);
+      return;
+    }
     await applyStatusToCell(server.id, server.ids, date, brushStatus);
   }
 
@@ -720,6 +729,7 @@ export default function SmtpHealthPage() {
             onChange={e => setBrushStatus(e.target.value)}
             className="glass-input rounded-md px-2 py-1 text-[10px] outline-none"
           >
+            <option value="__CLEAR__">CLEAR</option>
             {Object.keys(STATUS_CONFIG).map(status => (
               <option key={status} value={status}>{status}</option>
             ))}
