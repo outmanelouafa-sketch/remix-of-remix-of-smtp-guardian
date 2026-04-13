@@ -10,6 +10,7 @@ export default function DelistingsPage() {
   const { user, canManageServers } = useAuth();
   const [delistings, setDelistings] = useState<any[]>([]);
   const [servers, setServers] = useState<any[]>([]);
+  const [todayBlacklistQueue, setTodayBlacklistQueue] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
@@ -29,13 +30,51 @@ export default function DelistingsPage() {
 
   async function loadData() {
     setLoading(true);
-    const [dRes, sRes] = await Promise.all([
+    const today = new Date().toISOString().split('T')[0];
+    const [dRes, sRes, qRes] = await Promise.all([
       supabase.from('delistings').select('*, servers(ids, ip_main)').order('submitted_date', { ascending: false }),
       supabase.from('servers').select('id, ids, ip_main').eq('section', 'production'),
+      supabase
+        .from('smtp_status')
+        .select('id, server_id, status, date, updated_by, updated_at, servers(ids, ip_main)')
+        .eq('date', today)
+        .in('status', ['BL', 'SH']),
     ]);
     setDelistings(dRes.data || []);
     setServers(sRes.data || []);
+    setTodayBlacklistQueue(qRes.data || []);
     setLoading(false);
+  }
+
+  async function addQueueItemToDelisting(item: any) {
+    const exists = delistings.some(
+      d =>
+        d.server_id === item.server_id &&
+        d.blacklist_type === item.status &&
+        d.submitted_date === item.date
+    );
+    if (exists) {
+      toast('Already added to delistings for today');
+      return;
+    }
+
+    const { error } = await supabase.from('delistings').insert({
+      server_id: item.server_id,
+      blacklist_type: item.status,
+      submitted_date: item.date,
+      result: 'pending',
+      notes: `Auto from SMTP status (${item.status})`,
+      created_by: user!.name,
+    });
+
+    if (error) {
+      toast.error('Failed to add delisting');
+      return;
+    }
+
+    await logActivity(user!.name, 'add_delisting', (item.servers as any)?.ids || '', `Added delisting ${item.status} from SMTP queue`);
+    toast.success('Added to delistings');
+    loadData();
   }
 
   async function handleSave() {
@@ -117,6 +156,60 @@ export default function DelistingsPage() {
           <button onClick={() => { setSearch(''); setFilterType(''); setFilterResult(''); }} className="text-xs text-muted-foreground hover:text-foreground px-2">Clear</button>
         )}
         <span className="text-xs text-muted-foreground self-center ml-auto">{filteredDelistings.length} result{filteredDelistings.length !== 1 ? 's' : ''}</span>
+      </div>
+
+      <div className="glass-card rounded-xl overflow-hidden">
+        <div className="px-3 py-2 border-b border-border flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-foreground">Today BL/SH Queue</h3>
+          <span className="text-xs text-muted-foreground">{todayBlacklistQueue.length} item{todayBlacklistQueue.length !== 1 ? 's' : ''}</span>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full dense-table">
+            <thead>
+              <tr className="text-left">
+                <th>Server</th><th>IP</th><th>Status</th><th>Date</th><th>Updated By</th><th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {todayBlacklistQueue.length === 0 ? (
+                <tr><td colSpan={6} className="text-center py-6 text-muted-foreground">No BL/SH statuses for today</td></tr>
+              ) : todayBlacklistQueue.map(item => {
+                const alreadyAdded = delistings.some(
+                  d =>
+                    d.server_id === item.server_id &&
+                    d.blacklist_type === item.status &&
+                    d.submitted_date === item.date
+                );
+                return (
+                  <tr key={item.id} className="hover:bg-secondary/30">
+                    <td className="font-mono text-primary">{(item.servers as any)?.ids || ''}</td>
+                    <td className="font-mono">{(item.servers as any)?.ip_main || ''}</td>
+                    <td>
+                      <span className="status-pill" style={{ color: item.status === 'BL' ? '#e53e3e' : '#ecc94b', background: item.status === 'BL' ? 'rgba(229,62,62,0.15)' : 'rgba(236,201,75,0.15)' }}>
+                        {item.status}
+                      </span>
+                    </td>
+                    <td>{item.date}</td>
+                    <td>{item.updated_by || '—'}</td>
+                    <td>
+                      {canManageServers ? (
+                        <button
+                          disabled={alreadyAdded}
+                          onClick={() => addQueueItemToDelisting(item)}
+                          className="glass-button rounded-md px-2.5 py-1 text-xs disabled:opacity-50"
+                        >
+                          {alreadyAdded ? 'Added' : 'Add'}
+                        </button>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">View only</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <div className="glass-card rounded-xl overflow-hidden">
