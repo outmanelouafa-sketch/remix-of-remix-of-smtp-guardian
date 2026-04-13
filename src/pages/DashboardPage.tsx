@@ -58,7 +58,6 @@ export default function DashboardPage() {
     setLoading(true);
     try {
       const today = dateFilter;
-      const twoWeeksAgo = new Date(new Date(dateFilter).getTime() - 14 * 86400000).toISOString().split('T')[0];
 
       // Check if user is smtp_manager - filter by their assigned servers
       const isSmtpManager = user?.role === 'smtp_manager';
@@ -92,7 +91,7 @@ export default function DashboardPage() {
 
       // Build statuses queries
       let todayStatusQuery = supabase.from('smtp_status').select('*').eq('date', today);
-      let allStatusQuery = supabase.from('smtp_status').select('*').gte('date', twoWeeksAgo).lte('date', today);
+      let allStatusQuery = supabase.from('smtp_status').select('*');
       
       if (assignedServerIds !== null) {
         if (assignedServerIds.length > 0) {
@@ -193,6 +192,107 @@ export default function DashboardPage() {
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value);
 
+    // --- Provider quality analytics (last 14 days + selected day trend) ---
+    const providerByServerId: Record<string, string> = {};
+    servers.forEach(s => {
+      providerByServerId[s.id] = s.provider || 'Unknown';
+    });
+
+    const providerStatusTotals: Record<string, {
+      total: number;
+      clean: number;
+      sh: number;
+      issues: number;
+      flips: number;
+      providerServers: Set<string>;
+      lastByServer: Record<string, string>;
+    }> = {};
+
+    allStatuses
+      .slice()
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .forEach(s => {
+        const provider = providerByServerId[s.server_id] || 'Unknown';
+        if (!providerStatusTotals[provider]) {
+          providerStatusTotals[provider] = {
+            total: 0,
+            clean: 0,
+            sh: 0,
+            issues: 0,
+            flips: 0,
+            providerServers: new Set<string>(),
+            lastByServer: {},
+          };
+        }
+        const bucket = providerStatusTotals[provider];
+        bucket.total += 1;
+        bucket.providerServers.add(s.server_id);
+        if (s.status === 'CLEAN') bucket.clean += 1;
+        if (s.status === 'SH') bucket.sh += 1;
+        if (s.status !== 'CLEAN') bucket.issues += 1;
+        const prev = bucket.lastByServer[s.server_id];
+        if (prev && prev !== s.status) bucket.flips += 1;
+        bucket.lastByServer[s.server_id] = s.status;
+      });
+
+    const todayProviderStatus: Record<string, { total: number; clean: number }> = {};
+    const previousProviderDay = new Date(new Date(dateFilter).getTime() - 86400000).toISOString().split('T')[0];
+    const previousDayProviderStatus: Record<string, { total: number; clean: number }> = {};
+
+    statuses.forEach(s => {
+      const provider = providerByServerId[s.server_id] || 'Unknown';
+      if (!todayProviderStatus[provider]) todayProviderStatus[provider] = { total: 0, clean: 0 };
+      todayProviderStatus[provider].total += 1;
+      if (s.status === 'CLEAN') todayProviderStatus[provider].clean += 1;
+    });
+
+    allStatuses
+      .filter(s => s.date === previousProviderDay)
+      .forEach(s => {
+        const provider = providerByServerId[s.server_id] || 'Unknown';
+        if (!previousDayProviderStatus[provider]) previousDayProviderStatus[provider] = { total: 0, clean: 0 };
+        previousDayProviderStatus[provider].total += 1;
+        if (s.status === 'CLEAN') previousDayProviderStatus[provider].clean += 1;
+      });
+
+    const providerHealthData = Object.entries(providerStatusTotals)
+      .map(([provider, bucket]) => {
+        const cleanRate = bucket.total > 0 ? Math.round((bucket.clean / bucket.total) * 100) : 0;
+        const issueRate = bucket.total > 0 ? Math.round((bucket.issues / bucket.total) * 100) : 0;
+        const spamhausRate = bucket.total > 0 ? Math.round((bucket.sh / bucket.total) * 100) : 0;
+        const instabilityRate = bucket.total > 0 ? Math.round((bucket.flips / bucket.total) * 100) : 0;
+        const providerSize = bucket.providerServers.size || 1;
+        const flipPerServer = Math.round((bucket.flips / providerSize) * 10) / 10;
+        const score = Math.max(
+          0,
+          Math.min(
+            100,
+            Math.round(cleanRate - spamhausRate * 1.2 - instabilityRate * 0.6 - Math.min(20, flipPerServer * 2))
+          )
+        );
+
+        const todayBucket = todayProviderStatus[provider];
+        const prevBucket = previousDayProviderStatus[provider];
+        const todayCleanRate = todayBucket && todayBucket.total > 0 ? Math.round((todayBucket.clean / todayBucket.total) * 100) : null;
+        const prevCleanRate = prevBucket && prevBucket.total > 0 ? Math.round((prevBucket.clean / prevBucket.total) * 100) : null;
+        const trendDelta = todayCleanRate !== null && prevCleanRate !== null ? todayCleanRate - prevCleanRate : 0;
+
+        const grade = score >= 85 ? 'A' : score >= 70 ? 'B' : score >= 50 ? 'C' : 'D';
+        return {
+          provider,
+          providerSize,
+          cleanRate,
+          issueRate,
+          spamhausRate,
+          instabilityRate,
+          flipPerServer,
+          score,
+          grade,
+          trendDelta,
+        };
+      })
+      .sort((a, b) => b.score - a.score);
+
     // --- Status distribution today ---
     const statusCount: Record<string, number> = {};
     statuses.forEach(s => {
@@ -220,7 +320,7 @@ export default function DashboardPage() {
       production, suspended, expiringSoon,
       todayBL, todaySH, todayClean,
       delistingsThisWeek, delistingsToday, approvedThisWeek,
-      trendData, providerData, statusPieData,
+      trendData, providerData, statusPieData, providerHealthData,
       healthPct, healthDelta, totalToday, splCount,
     };
   }, [servers, statuses, allStatuses, delistings, serverFlags]);
@@ -229,7 +329,7 @@ export default function DashboardPage() {
 
   const { production, suspended, expiringSoon, todayBL, todaySH, todayClean,
     delistingsThisWeek, delistingsToday, approvedThisWeek,
-    trendData, providerData, statusPieData, healthPct, healthDelta, totalToday, splCount } = analytics;
+    trendData, providerData, statusPieData, providerHealthData, healthPct, healthDelta, totalToday, splCount } = analytics;
 
   const stats = [
     { label: 'Production', value: production.length, icon: Server, color: 'text-primary' },
@@ -450,6 +550,61 @@ export default function DashboardPage() {
           </AreaChart>
         </ResponsiveContainer>
       </div>
+
+      {/* Provider Quality Analytics - boss/server_manager only */}
+      {(user?.role === 'boss' || user?.role === 'server_manager') && (
+        <div className="glass-card rounded-xl p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-foreground">Provider Quality Analytics</h3>
+            <p className="text-[11px] text-muted-foreground">Based on last 14 days of statuses</p>
+          </div>
+          {providerHealthData.length === 0 ? (
+            <p className="text-xs text-muted-foreground">No provider health data available.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-border">
+                    <th className="text-left py-2 font-semibold text-muted-foreground">Provider</th>
+                    <th className="text-right py-2 font-semibold text-muted-foreground">IPs</th>
+                    <th className="text-right py-2 font-semibold text-muted-foreground">Clean %</th>
+                    <th className="text-right py-2 font-semibold text-muted-foreground">Issue %</th>
+                    <th className="text-right py-2 font-semibold text-muted-foreground">SH %</th>
+                    <th className="text-right py-2 font-semibold text-muted-foreground">Trend</th>
+                    <th className="text-right py-2 font-semibold text-muted-foreground">Score</th>
+                    <th className="text-right py-2 font-semibold text-muted-foreground">Grade</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {providerHealthData.map(row => (
+                    <tr key={row.provider} className="border-b border-border/60 hover:bg-secondary/20">
+                      <td className="py-2.5 text-foreground font-medium">{row.provider}</td>
+                      <td className="py-2.5 text-right text-muted-foreground">{row.providerSize}</td>
+                      <td className={`py-2.5 text-right font-semibold ${row.cleanRate >= 70 ? 'text-status-clean' : row.cleanRate >= 45 ? 'text-yellow-400' : 'text-status-bl'}`}>{row.cleanRate}%</td>
+                      <td className={`py-2.5 text-right font-semibold ${row.issueRate <= 30 ? 'text-status-clean' : row.issueRate <= 55 ? 'text-yellow-400' : 'text-status-bl'}`}>{row.issueRate}%</td>
+                      <td className={`py-2.5 text-right font-semibold ${row.spamhausRate <= 10 ? 'text-status-clean' : row.spamhausRate <= 25 ? 'text-yellow-400' : 'text-status-bl'}`}>{row.spamhausRate}%</td>
+                      <td className={`py-2.5 text-right font-semibold ${row.trendDelta > 0 ? 'text-status-clean' : row.trendDelta < 0 ? 'text-status-bl' : 'text-muted-foreground'}`}>
+                        {row.trendDelta > 0 ? '+' : ''}{row.trendDelta}%
+                      </td>
+                      <td className="py-2.5 text-right text-foreground font-bold">{row.score}</td>
+                      <td className="py-2.5 text-right">
+                        <span className={`inline-flex rounded-md px-2 py-0.5 font-bold ${
+                          row.grade === 'A' ? 'bg-green-500/20 text-green-400' :
+                          row.grade === 'B' ? 'bg-blue-500/20 text-blue-400' :
+                          row.grade === 'C' ? 'bg-yellow-500/20 text-yellow-400' :
+                          'bg-red-500/20 text-red-400'
+                        }`}>
+                          {row.grade}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Activity + Delistings */}
       <div className="grid md:grid-cols-2 gap-4">
