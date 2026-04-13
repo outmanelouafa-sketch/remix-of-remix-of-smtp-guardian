@@ -52,8 +52,15 @@ export default function SmtpHealthPage() {
   const [selectStartRow, setSelectStartRow] = useState<number | null>(null);
   const [selectEndRow, setSelectEndRow] = useState<number | null>(null);
   const [selectedCells, setSelectedCells] = useState<Set<string>>(new Set());
+  const [selectedServerIds, setSelectedServerIds] = useState<Set<string>>(new Set());
+  const [bulkStatus, setBulkStatus] = useState<string>('CLEAN');
+  const [bulkSaving, setBulkSaving] = useState(false);
+  const [brushMode, setBrushMode] = useState(false);
+  const [brushStatus, setBrushStatus] = useState<string>('CLEAN');
+  const [painting, setPainting] = useState(false);
   const tableRef = useRef<HTMLTableElement>(null);
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const paintedCellsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     loadData();
@@ -209,6 +216,7 @@ export default function SmtpHealthPage() {
     const q = search.toLowerCase();
     return servers.filter(s => !q || s.ids?.toLowerCase().includes(q) || s.ip_main?.toLowerCase().includes(q));
   }, [servers, search]);
+  const allFilteredSelected = filteredServers.length > 0 && filteredServers.every(s => selectedServerIds.has(s.id));
 
   const statusMap = useMemo(() => {
     const map: Record<string, any> = {};
@@ -245,12 +253,20 @@ export default function SmtpHealthPage() {
     if (selecting) {
       setSelecting(false);
     }
-  }, [selecting]);
+    if (painting) {
+      setPainting(false);
+      paintedCellsRef.current.clear();
+    }
+  }, [selecting, painting]);
 
   useEffect(() => {
     window.addEventListener('mouseup', handleMouseUp);
     return () => window.removeEventListener('mouseup', handleMouseUp);
   }, [handleMouseUp]);
+
+  useEffect(() => {
+    setSelectedServerIds(new Set());
+  }, [section, month, year, selectedSmtpManager]);
 
   // Ctrl+C shortcut
   useEffect(() => {
@@ -336,6 +352,57 @@ export default function SmtpHealthPage() {
     await logActivity(user!.name, 'update_smtp_status', serverIds, `Quick set ${status} for ${date}`);
     toast.success(`${serverIds} → ${status}`);
     setContextMenu(null);
+  }
+
+  async function applyStatusToCell(serverId: string, serverIds: string, date: string, status: string) {
+    const existing = statusMap[`${serverId}_${date}`];
+    if (existing) {
+      const { error } = await supabase.from('smtp_status').update({
+        status,
+        updated_by: user!.name,
+        updated_at: new Date().toISOString(),
+      }).eq('id', existing.id);
+      if (error) return false;
+      setStatuses(prev => prev.map(s => s.id === existing.id ? { ...s, status, updated_by: user!.name, updated_at: new Date().toISOString() } : s));
+    } else {
+      const { data, error } = await supabase.from('smtp_status').insert({
+        server_id: serverId,
+        date,
+        status,
+        updated_by: user!.name,
+      }).select().single();
+      if (error) return false;
+      setStatuses(prev => [...prev, data]);
+    }
+    await logActivity(user!.name, 'update_smtp_status', serverIds, `Set ${status} for ${date}`);
+    return true;
+  }
+
+  async function handleBulkApplyToday() {
+    if (selectedServerIds.size === 0 || !bulkStatus) return;
+    setBulkSaving(true);
+    const now = new Date();
+    const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const selectedServers = servers.filter(s => selectedServerIds.has(s.id));
+    let success = 0;
+    for (const srv of selectedServers) {
+      const ok = await applyStatusToCell(srv.id, srv.ids, date, bulkStatus);
+      if (ok) success += 1;
+    }
+    setBulkSaving(false);
+    if (success > 0) {
+      toast.success(`Applied ${bulkStatus} to ${success} server(s) for ${date}`);
+    } else {
+      toast.error('Failed to apply bulk status');
+    }
+  }
+
+  async function paintCellStatus(server: any, day: number) {
+    const date = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const paintKey = `${server.id}_${date}`;
+    if (paintedCellsRef.current.has(paintKey)) return;
+    paintedCellsRef.current.add(paintKey);
+    await applyStatusToCell(server.id, server.ids, date, brushStatus);
   }
 
   async function toggleSblFlag(serverId: string, serverIds: string) {
@@ -639,6 +706,25 @@ export default function SmtpHealthPage() {
       <div className="flex gap-2 items-center">
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by IDs or IP..." className="glass-input rounded-lg px-3 py-1.5 text-sm text-foreground outline-none w-52" />
         {search && <button onClick={() => setSearch('')} className="text-xs text-muted-foreground hover:text-foreground px-2">Clear</button>}
+
+        <div className="ml-2 flex items-center gap-2 rounded-lg border border-border px-2 py-1.5 bg-card/60">
+          <label className="text-xs text-muted-foreground">Brush</label>
+          <button
+            onClick={() => setBrushMode(v => !v)}
+            className={`rounded-md px-2 py-0.5 text-[10px] font-semibold transition-colors ${brushMode ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}
+          >
+            {brushMode ? 'ON' : 'OFF'}
+          </button>
+          <select
+            value={brushStatus}
+            onChange={e => setBrushStatus(e.target.value)}
+            className="glass-input rounded-md px-2 py-1 text-[10px] outline-none"
+          >
+            {Object.keys(STATUS_CONFIG).map(status => (
+              <option key={status} value={status}>{status}</option>
+            ))}
+          </select>
+        </div>
         
         {selectedCells.size > 0 && (
           <div className="flex items-center gap-2 ml-2 px-3 py-1 rounded-lg bg-primary/10 border border-primary/20">
@@ -658,9 +744,37 @@ export default function SmtpHealthPage() {
         <span className="text-xs text-muted-foreground self-center ml-auto">{filteredServers.length} servers</span>
       </div>
 
+      {selectedServerIds.size > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card/60 px-3 py-2">
+          <span className="text-xs font-medium text-foreground">{selectedServerIds.size} rows selected</span>
+          <select
+            value={bulkStatus}
+            onChange={e => setBulkStatus(e.target.value)}
+            className="glass-input rounded-md px-2 py-1 text-xs outline-none"
+          >
+            {Object.keys(STATUS_CONFIG).map(status => (
+              <option key={status} value={status}>{status}</option>
+            ))}
+          </select>
+          <button
+            onClick={handleBulkApplyToday}
+            disabled={bulkSaving}
+            className="glass-button rounded-md px-3 py-1 text-xs font-semibold disabled:opacity-60"
+          >
+            {bulkSaving ? 'Applying...' : 'Apply for today'}
+          </button>
+          <button
+            onClick={() => setSelectedServerIds(new Set())}
+            className="text-xs text-muted-foreground hover:text-foreground"
+          >
+            Clear selection
+          </button>
+        </div>
+      )}
+
       {/* Tip */}
       {selectedCells.size === 0 && (
-        <p className="text-[10px] text-muted-foreground/60">💡 Double-click a cell then drag down to select · Ctrl+C to copy · Esc to cancel</p>
+        <p className="text-[10px] text-muted-foreground/60">💡 Double-click a cell then drag down to select · Ctrl+C to copy · Esc to cancel · Brush mode writes status instantly</p>
       )}
 
       {/* Grid */}
@@ -669,9 +783,26 @@ export default function SmtpHealthPage() {
           <table ref={tableRef} className="w-full border-collapse text-[11px]">
             <thead>
               <tr>
-                <th className="sticky left-0 z-10 bg-card px-1.5 py-1.5 text-left text-[10px] text-muted-foreground uppercase font-semibold border-r border-border w-[70px] min-w-[70px]">IDS</th>
-                <th className="sticky left-[70px] z-10 bg-card px-1.5 py-1.5 text-left text-[10px] text-muted-foreground uppercase font-semibold border-r border-border w-[110px] min-w-[110px]">IP</th>
-                <th className="sticky left-[180px] z-10 bg-card px-1.5 py-1.5 text-left text-[10px] text-muted-foreground uppercase font-semibold border-r border-border w-[50px] min-w-[50px]">N.DUE</th>
+                <th className="sticky left-0 z-20 bg-card px-1.5 py-1.5 text-center border-r border-border w-[34px] min-w-[34px]">
+                  <input
+                    type="checkbox"
+                    checked={allFilteredSelected}
+                    onChange={e => {
+                      if (e.target.checked) {
+                        setSelectedServerIds(prev => new Set([...Array.from(prev), ...filteredServers.map(s => s.id)]));
+                      } else {
+                        setSelectedServerIds(prev => {
+                          const next = new Set(prev);
+                          filteredServers.forEach(s => next.delete(s.id));
+                          return next;
+                        });
+                      }
+                    }}
+                  />
+                </th>
+                <th className="sticky left-[34px] z-10 bg-card px-1.5 py-1.5 text-left text-[10px] text-muted-foreground uppercase font-semibold border-r border-border w-[70px] min-w-[70px]">IDS</th>
+                <th className="sticky left-[104px] z-10 bg-card px-1.5 py-1.5 text-left text-[10px] text-muted-foreground uppercase font-semibold border-r border-border w-[110px] min-w-[110px]">IP</th>
+                <th className="sticky left-[214px] z-10 bg-card px-1.5 py-1.5 text-left text-[10px] text-muted-foreground uppercase font-semibold border-r border-border w-[50px] min-w-[50px]">N.DUE</th>
                 {days.map(d => (
                   <th
                     key={d}
@@ -695,12 +826,26 @@ export default function SmtpHealthPage() {
                   style={hasSbl ? { background: 'rgba(234, 179, 8, 0.15)' } : undefined}
                   onContextMenu={e => handleContextMenu(server, e)}
                 >
-                  <td className="sticky left-0 z-10 px-1.5 py-0.5 text-[11px] font-mono font-medium text-primary border-r border-border border-t" style={hasSbl ? { background: 'rgba(234, 179, 8, 0.18)' } : { background: 'hsl(var(--card))' }}>
+                  <td className="sticky left-0 z-20 px-1 py-0.5 text-center border-r border-border border-t bg-card">
+                    <input
+                      type="checkbox"
+                      checked={selectedServerIds.has(server.id)}
+                      onChange={e => {
+                        setSelectedServerIds(prev => {
+                          const next = new Set(prev);
+                          if (e.target.checked) next.add(server.id);
+                          else next.delete(server.id);
+                          return next;
+                        });
+                      }}
+                    />
+                  </td>
+                  <td className="sticky left-[34px] z-10 px-1.5 py-0.5 text-[11px] font-mono font-medium text-primary border-r border-border border-t" style={hasSbl ? { background: 'rgba(234, 179, 8, 0.18)' } : { background: 'hsl(var(--card))' }}>
                     {hasSbl && <Shield className="w-3 h-3 inline mr-0.5 text-yellow-500" />}
                     {server.ids}
                   </td>
-                  <td className="sticky left-[70px] z-10 bg-card px-1.5 py-0.5 text-[11px] font-mono text-muted-foreground border-r border-border border-t">{server.ip_main}</td>
-                  <td className="sticky left-[180px] z-10 bg-card px-1.5 py-0.5 text-[11px] border-r border-border border-t">
+                  <td className="sticky left-[104px] z-10 bg-card px-1.5 py-0.5 text-[11px] font-mono text-muted-foreground border-r border-border border-t">{server.ip_main}</td>
+                  <td className="sticky left-[214px] z-10 bg-card px-1.5 py-0.5 text-[11px] border-r border-border border-t">
                     {server.n_due && (
                       <span style={{ color: getDrnColor(getDrnDays(server.n_due) || 999) }}>{server.n_due?.slice(5)}</span>
                     )}
@@ -717,6 +862,10 @@ export default function SmtpHealthPage() {
                         }`}
                         style={isToday(d) ? { borderLeft: '2px solid hsl(217 91% 64%)', borderRight: '2px solid hsl(217 91% 64%)' } : undefined}
                         onClick={e => {
+                          if (brushMode) {
+                            void paintCellStatus(server, d);
+                            return;
+                          }
                           if (selecting) return;
                           if (selectedCells.size > 0) {
                             clearSelection();
@@ -732,6 +881,7 @@ export default function SmtpHealthPage() {
                           }, 250);
                         }}
                         onDoubleClick={e => {
+                          if (brushMode) return;
                           // Cancel single-click popup
                           if (clickTimerRef.current) {
                             clearTimeout(clickTimerRef.current);
@@ -739,7 +889,19 @@ export default function SmtpHealthPage() {
                           }
                           handleCellDoubleClick(rowIdx, d, e);
                         }}
-                        onMouseEnter={() => handleCellMouseEnter(rowIdx, d)}
+                        onMouseDown={() => {
+                          if (brushMode) {
+                            setPainting(true);
+                            paintedCellsRef.current.clear();
+                            void paintCellStatus(server, d);
+                          }
+                        }}
+                        onMouseEnter={() => {
+                          handleCellMouseEnter(rowIdx, d);
+                          if (brushMode && painting) {
+                            void paintCellStatus(server, d);
+                          }
+                        }}
                         title={entry ? `${entry.status}${entry.note ? ': ' + entry.note : ''} — by ${entry.updated_by}` : 'Click to set status'}
                       >
                         {entry && (
@@ -763,7 +925,7 @@ export default function SmtpHealthPage() {
               })}
               {servers.length === 0 && (
                 <tr>
-                  <td colSpan={3 + daysInMonth} className="text-center py-8">
+                  <td colSpan={4 + daysInMonth} className="text-center py-8">
                     <div className="flex flex-col items-center gap-2">
                       <p className="text-sm text-muted-foreground">{emptyTitle}</p>
                       <p className="text-xs text-muted-foreground/80">{emptyHint}</p>
